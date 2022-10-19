@@ -103,9 +103,9 @@ Planned Triggers:
 
 FAQ:
 * What do you mean by "execution window"
-  * stuff
+  * The execution window is a `time.Duration` that you pass to the `NewScheduler()` function. This defines how often to fetch tasks from the storage backend. This is configurable mostly to control resources. For example if set to 30 seconds, then every 30 seconds the scheduler will get the tasks scheduled to execute in the next 30 seconds and hold them in memory, executing your handler at the task's scheduled time. You can tune this to control memory usage. 
 * What does the `ExpireAfter` field on a task do?
-  * stuff
+  * This setting is used for fault tolerance. The backend store tracks when a task is in progress. If a task's scheduled time is in the past, the store will re-schedule the task if the `ExpireAfter` has passed. This would happen if there was some failure to update the task in the store, or if the handler hung, or something like that so that the task doesn't just get dropped. This lets you have handler functions that run longer than the execution window without executing multiple times.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
