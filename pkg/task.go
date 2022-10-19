@@ -32,3 +32,7 @@ func TaskFromBytes(bytes []byte) (Task, error) {
 func (t Task) GetTrigger() TriggerInterface {
 	return t.ExecuteOnceTrigger
 }
+
+func (t Task) IdString() string {
+	return t.Id.String()
+}

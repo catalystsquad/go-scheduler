@@ -7,25 +7,26 @@ import (
 	"github.com/google/uuid"
 	"github.com/joomcode/errorx"
 	"github.com/sirupsen/logrus"
+	"strings"
 	"sync"
 	"time"
 )
 
 type Scheduler struct {
-	Window   *time.Duration
-	Handler  func(task Task) error
-	store    StoreInterface
-	taskTree *btree.Tree
-	lock     *sync.Mutex
+	Window       *time.Duration
+	Handler      func(task Task) error
+	store        StoreInterface
+	scheduleTree *btree.Tree
+	lock         *sync.Mutex
 }
 
 func NewScheduler(window time.Duration, handler func(task Task) error, store StoreInterface) (*Scheduler, error) {
 	scheduler := &Scheduler{
-		Window:   &window,
-		Handler:  handler,
-		store:    store,
-		taskTree: btree.NewWithStringComparator(3), // string comparator because iso timestamps are sortable in string form, order 3 to keep it shallow
-		lock:     new(sync.Mutex),
+		Window:       &window,
+		Handler:      handler,
+		store:        store,
+		scheduleTree: btree.NewWith(3, ScheduleTreeComparator),
+		lock:         new(sync.Mutex),
 	}
 	err := scheduler.initializeStore()
 	return scheduler, err
@@ -88,12 +89,7 @@ func (s *Scheduler) scheduleJobs(firedAt time.Time) {
 		return
 	}
 	for _, task := range upcomingTasks {
-		key, err := generateTaskTreeKey(task)
-		if err != nil {
-			logging.Log.WithError(err).Error("error adding task to task tree")
-			continue
-		}
-		s.taskTree.Put(key, &task)
+		s.addTaskToTree(task)
 	}
 }
 
@@ -105,19 +101,12 @@ func (s *Scheduler) updateTaskInProgressTimestamp(task Task) error {
 
 func (s *Scheduler) shouldHandleTask(task Task) bool {
 	if task.InProgressAt == nil {
-		logging.Log.Info("task not in progress, so it should be handled")
 		// not in progress, so we should handle it
 		return true
 	}
 	// check the expiration time against, if it's expired then that means it's run before but wasn't completed for some reason
 	// so we should run it again
 	expirationTime := task.InProgressAt.Add(*task.ExpireAfter)
-	after := time.Now().After(expirationTime)
-	if after {
-		logging.Log.Info("time is after expiration time, so we should handle it")
-	} else {
-		logging.Log.Info("time is not after expiration time")
-	}
 	return time.Now().After(expirationTime)
 }
 
@@ -143,8 +132,6 @@ func (s *Scheduler) updateNextFireTime(task Task) {
 	err := s.store.DeleteTask(task.Id)
 	if err != nil {
 		logging.Log.WithError(err).WithFields(logrus.Fields{"task_id": task.Id}).Error("error updating next fire time")
-	} else {
-		logging.Log.Info("updated next fire time")
 	}
 }
 
@@ -152,37 +139,24 @@ func (s *Scheduler) initializeStore() error {
 	return s.store.Initialize()
 }
 
-func (s *Scheduler) addTaskToTree(task Task) error {
+func (s *Scheduler) addTaskToTree(task Task) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	key, err := generateTaskTreeKey(task)
-	if err != nil {
-		return err
-	}
-	s.taskTree.Put(key, &task)
-	return nil
+	s.scheduleTree.Put(GetScheduleTreeKey(task), &task)
 }
 
 func (s *Scheduler) popTaskFromTree() *Task {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	// todo: handle no tasks?
-	key := s.taskTree.LeftKey()
-	value := s.taskTree.LeftValue()
+	key := s.scheduleTree.LeftKey()
+	value := s.scheduleTree.LeftValue()
 	if value != nil {
-		s.taskTree.Remove(key)
-		return value.(*Task)
+		s.scheduleTree.Remove(key)
+		task := value.(*Task)
+		return task
 	} else {
 		return nil
 	}
-}
-
-func generateTaskTreeKey(task Task) (string, error) {
-	nextFireTime, err := task.GetTrigger().GetNextFireTime()
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%s_%s", nextFireTime.Format(time.RFC3339), task.Id.String()), nil
 }
 
 func (s *Scheduler) consumeTasks() {
@@ -206,4 +180,32 @@ func (s *Scheduler) consumeTasks() {
 			}
 		}
 	}
+}
+
+func ScheduleTreeComparator(a, b interface{}) int {
+	aTime, err := getTimestampFromScheduleKey(a.(string))
+	if err != nil {
+		logging.Log.WithError(err).WithFields(logrus.Fields{"key_value": a}).Error("error comparing keys")
+	}
+	bTime, err := getTimestampFromScheduleKey(b.(string))
+	if err != nil {
+		logging.Log.WithError(err).WithFields(logrus.Fields{"key_value": b}).Error("error comparing keys")
+	}
+	switch {
+	case aTime.Before(bTime):
+		return -1
+	case aTime.After(bTime):
+		return 1
+	default:
+		return 0
+	}
+}
+
+func GetScheduleTreeKey(task Task) string {
+	return fmt.Sprintf("%s_%s", task.GetTrigger().GetNextFireTime().Format(time.RFC3339), task.Id.String())
+}
+
+func getTimestampFromScheduleKey(key string) (time.Time, error) {
+	timestampString := strings.Split(key, "_")[0]
+	return time.Parse(time.RFC3339, timestampString)
 }
