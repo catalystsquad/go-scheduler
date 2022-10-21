@@ -40,6 +40,7 @@ func (s *Scheduler) ScheduleTask(task Task) error {
 	if task.ExpireAfter == nil {
 		task.ExpireAfter = s.Window
 	}
+	task.NextFireTime = task.GetTrigger().GetNextFireTime(task)
 	return s.store.ScheduleTask(task)
 }
 
@@ -93,45 +94,53 @@ func (s *Scheduler) scheduleJobs(firedAt time.Time) {
 	}
 }
 
-func (s *Scheduler) updateTaskInProgressTimestamp(task Task) error {
-	inProgressAt := time.Now().UTC()
-	task.InProgressAt = &inProgressAt
-	return s.store.UpdateTask(task)
-}
-
 func (s *Scheduler) shouldHandleTask(task Task) bool {
-	if task.InProgressAt == nil {
+	if !task.InProgress {
 		// not in progress, so we should handle it
 		return true
 	}
-	// check the expiration time against, if it's expired then that means it's run before but wasn't completed for some reason
+	// check the expiration time, if it's expired then that means it's run before but wasn't completed for some reason
 	// so we should run it again
-	expirationTime := task.InProgressAt.Add(*task.ExpireAfter)
+	expirationTime := task.LastFireTime.Add(*task.ExpireAfter)
 	return time.Now().After(expirationTime)
 }
 
 func (s *Scheduler) handleTask(task Task) {
 	// execute the handler
 	err := s.Handler(task)
-	if err == nil {
-		// no error, update the task's next fire time if it's a cron, or delete it if it's a single task
+	if err == nil || !task.RetryOnError {
+		// either no error, or there is an error but task shouldn't be retried, so update the next fire time so it doesn't get
+		// picked up again in the next window
 		s.updateNextFireTime(task)
 	} else {
-		// log the error
+		// just log the error, task will get picked up again in the next execution window since the fire time wasn't updated
 		logging.Log.WithError(err).WithFields(logrus.Fields{"id": task.Id}).Error("error handling task")
-		if !task.RetryOnError {
-			// task shouldn't be retried, so update the next fire time. Only do this for tasks that shouldn't be retried because
-			// if the next fire time isn't updated, then it will get picked up in the next window
-			s.updateNextFireTime(task)
-		}
 	}
 }
 
+func (s *Scheduler) markTaskInProgress(task *Task) error {
+	task.InProgress = true
+	task.LastFireTime = task.NextFireTime
+	logging.Log.Debug("setting task in progress")
+	return s.store.UpdateTask(*task)
+}
+
 func (s *Scheduler) updateNextFireTime(task Task) {
-	// only current trigger is execute once, so we just delete the task
-	err := s.store.DeleteTask(task.Id)
+	var err error
+	nextFireTime := time.Time{}
+	trigger := task.GetTrigger()
+	if trigger.IsRecurring() {
+		task.InProgress = false
+		nextFireTime = *task.GetTrigger().GetNextFireTime(task)
+		task.NextFireTime = &nextFireTime
+		logging.Log.WithFields(logrus.Fields{"current_time": time.Now().UTC().Format(time.RFC3339Nano), "next_fire_time": nextFireTime.Format(time.RFC3339Nano)}).Debug("scheduler setting next fire time for recurring trigger")
+		err = s.store.UpdateTask(task)
+	} else {
+		logging.Log.Debug("scheduler deleting task because trigger is non-recurring")
+		err = s.store.DeleteTask(task.Id)
+	}
 	if err != nil {
-		logging.Log.WithError(err).WithFields(logrus.Fields{"task_id": task.Id}).Error("error updating next fire time")
+		logging.Log.WithError(err).WithFields(logrus.Fields{"task_id": task.Id.String()}).Error("error updating or deleting task when updating next fire time")
 	}
 }
 
@@ -167,15 +176,14 @@ func (s *Scheduler) consumeTasks() {
 			run = false // no more tasks left to handle
 		} else {
 			if s.shouldHandleTask(*task) {
-				inProgressAt := time.Now().UTC()
-				task.InProgressAt = &inProgressAt
-				err := s.store.UpdateTask(*task)
+				// mark task in progress
+				err := s.markTaskInProgress(task)
 				if err == nil {
+					// task set as in progress handle the task
 					go s.handleTask(*task)
 				} else {
-					if err != nil {
-						logging.Log.WithError(err).WithFields(logrus.Fields{"task_id": task.Id}).Error("error marking task in progress")
-					}
+					// failed to mark the task in progress, don't call the handler, will try again in the next window execution
+					logging.Log.WithError(err).WithFields(logrus.Fields{"task_id": task.Id}).Error("error marking task in progress")
 				}
 			}
 		}
@@ -202,10 +210,10 @@ func ScheduleTreeComparator(a, b interface{}) int {
 }
 
 func GetScheduleTreeKey(task Task) string {
-	return fmt.Sprintf("%s_%s", task.GetTrigger().GetNextFireTime().Format(time.RFC3339), task.Id.String())
+	return fmt.Sprintf("%s_%s", task.GetTrigger().GetNextFireTime(task).Format(time.RFC3339Nano), task.Id.String())
 }
 
 func getTimestampFromScheduleKey(key string) (time.Time, error) {
 	timestampString := strings.Split(key, "_")[0]
-	return time.Parse(time.RFC3339, timestampString)
+	return time.Parse(time.RFC3339Nano, timestampString)
 }

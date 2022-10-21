@@ -2,7 +2,9 @@ package test
 
 import (
 	"errors"
+	"fmt"
 	"github.com/brianvoe/gofakeit/v6"
+	"github.com/catalystsquad/app-utils-go/logging"
 	"github.com/catalystsquad/go-scheduler/pkg"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -10,11 +12,15 @@ import (
 	"time"
 )
 
+const oncePerSecondCron = "* * * * * * *"
+const oncePerMinuteCronFormat = "%d * * * * * *"
+const everyNSecondsCronFormat = "0/%d * * * * * *"
+
 type TestMetaData struct {
 	Message string
 }
 
-func TestSchedulerHappyPath(t *testing.T, store pkg.StoreInterface) {
+func TestExecuteOnceTriggerHappyPath(t *testing.T, store pkg.StoreInterface) {
 	executionCount := 0
 	handler := func(task pkg.Task) error {
 		executionCount++
@@ -39,7 +45,7 @@ func TestSchedulerHappyPath(t *testing.T, store pkg.StoreInterface) {
 	require.Equal(t, 1, executionCount)
 }
 
-func TestSchedulerTasksRunInOrder(t *testing.T, store pkg.StoreInterface) {
+func TestExecuteOnceTriggerTasksRunInOrder(t *testing.T, store pkg.StoreInterface) {
 	// this tests that tasks are executed in the right order. 3 tasks are scheduled with execution times nearer to now than the last
 	// resulting in scheduling the last running task first, and the first running task last. The first running task should
 	// be executed first even though it was scheduled last
@@ -97,7 +103,7 @@ func TestSchedulerTasksRunInOrder(t *testing.T, store pkg.StoreInterface) {
 	require.Equal(t, executedTasks[2].Id, task1.Id)
 }
 
-func TestSchedulerLongRunningTaskExpired(t *testing.T, store pkg.StoreInterface) {
+func TestExecuteOnceTriggerLongRunningTaskExpired(t *testing.T, store pkg.StoreInterface) {
 	// first task sleeps longer than the window and expiration, simulating a long running task that eventually completes successfully
 	// this should result in the task expiring and being run twice.
 	executionCount := 0
@@ -127,7 +133,7 @@ func TestSchedulerLongRunningTaskExpired(t *testing.T, store pkg.StoreInterface)
 	require.Equal(t, 2, executionCount)
 }
 
-func TestSchedulerLongRunningTaskNotExpired(t *testing.T, store pkg.StoreInterface) {
+func TestExecuteOnceTriggerLongRunningTaskNotExpired(t *testing.T, store pkg.StoreInterface) {
 	// first task sleeps longer than the window but less than the expiration, simulating a long running task that eventually completes successfully before the expiration time
 	// this should result in the task being run once.
 	executionCount := 0
@@ -157,7 +163,7 @@ func TestSchedulerLongRunningTaskNotExpired(t *testing.T, store pkg.StoreInterfa
 	require.Equal(t, 1, executionCount)
 }
 
-func TestSchedulerRetry(t *testing.T, store pkg.StoreInterface) {
+func TestExecuteOnceTriggerRetry(t *testing.T, store pkg.StoreInterface) {
 	executionCount := 0
 	handler := func(task pkg.Task) error {
 		executionCount++
@@ -186,7 +192,7 @@ func TestSchedulerRetry(t *testing.T, store pkg.StoreInterface) {
 	// than should be required, and verifying it's retried 5 times
 }
 
-func TestSchedulerNoRetry(t *testing.T, store pkg.StoreInterface) {
+func TestExecuteOnceTriggerNoRetry(t *testing.T, store pkg.StoreInterface) {
 	executionCount := 0
 	handler := func(task pkg.Task) error {
 		executionCount++
@@ -210,4 +216,92 @@ func TestSchedulerNoRetry(t *testing.T, store pkg.StoreInterface) {
 	require.NoError(t, err)
 	time.Sleep(4 * time.Second)
 	require.Equal(t, 1, executionCount)
+}
+
+func TestCronTriggerHappyPath(t *testing.T, store pkg.StoreInterface) {
+	executionCount := 0
+	handler := func(task pkg.Task) error {
+		executionCount++
+		return nil
+	}
+	// tick every 500ms
+	scheduler, err := pkg.NewScheduler(500*time.Millisecond, handler, store)
+	require.NoError(t, err)
+	id := uuid.New()
+	metaData := TestMetaData{Message: gofakeit.HackerPhrase()}
+	cronTrigger, err := pkg.NewCronTrigger(oncePerSecondCron)
+	require.NoError(t, err)
+	task := pkg.Task{
+		Id:          &id,
+		Metadata:    metaData,
+		CronTrigger: cronTrigger,
+	}
+	err = scheduler.ScheduleTask(task)
+	require.NoError(t, err)
+	go scheduler.Run()
+	require.NoError(t, err)
+	time.Sleep(10 * time.Second)
+	require.Greater(t, executionCount, 6)
+}
+
+func TestCronTriggerRetry(t *testing.T, store pkg.StoreInterface) {
+	executionCount := 0
+	succeedAfter := 3
+	handler := func(task pkg.Task) error {
+		executionCount++
+		if executionCount == succeedAfter {
+			return nil
+		}
+		return errors.New("fayl")
+	}
+	// tick once per second
+	scheduler, err := pkg.NewScheduler(1*time.Second, handler, store)
+	require.NoError(t, err)
+	id := uuid.New()
+	metaData := TestMetaData{Message: gofakeit.HackerPhrase()}
+	// run once per minute starting 1 second from now
+	cronTrigger, err := pkg.NewCronTrigger(fmt.Sprintf(oncePerMinuteCronFormat, time.Now().Second()+1))
+	require.NoError(t, err)
+	task := pkg.Task{
+		Id:           &id,
+		Metadata:     metaData,
+		RetryOnError: true,
+		CronTrigger:  cronTrigger,
+	}
+	err = scheduler.ScheduleTask(task)
+	require.NoError(t, err)
+	go scheduler.Run()
+	require.NoError(t, err)
+	time.Sleep(10 * time.Second)
+	require.Equal(t, executionCount, 3) // trigger should only fire once, and it should get retried twice
+}
+
+func TestCronTriggerNoRetry(t *testing.T, store pkg.StoreInterface) {
+	executionCount := 0
+	handler := func(task pkg.Task) error {
+		executionCount++
+		logging.Log.WithField("time", time.Now().UTC().Format(time.RFC3339)).Info("handler called")
+		return errors.New("fayl")
+	}
+	scheduler, err := pkg.NewScheduler(1*time.Second, handler, store)
+	require.NoError(t, err)
+	id := uuid.New()
+	metaData := TestMetaData{Message: gofakeit.HackerPhrase()}
+	// every 2 seconds starting 1 second from now
+	cronTrigger, err := pkg.NewCronTrigger(fmt.Sprintf(everyNSecondsCronFormat, 2))
+	require.NoError(t, err)
+	task := pkg.Task{
+		Id:           &id,
+		Metadata:     metaData,
+		RetryOnError: false,
+		CronTrigger:  cronTrigger,
+	}
+	err = scheduler.ScheduleTask(task)
+	require.NoError(t, err)
+	go scheduler.Run()
+	require.NoError(t, err)
+	time.Sleep(7 * time.Second)
+	// between 3 and 4 executions depending on resources
+	require.GreaterOrEqual(t, executionCount, 3)
+	require.LessOrEqual(t, executionCount, 4)
 }

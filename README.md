@@ -96,9 +96,9 @@ Planned Backends:
 
 Implemented Triggers:
 * ExecuteOnce - Executes once at the specified time, respects retries and expiration
+* Cron - Executes on a cron schedule, respects retries and expiration
 
 Planned Triggers:
-* CRON - Execute on a cron schedule
 * Natural language - Execute every other tuesday at 9:34am
 
 FAQ:
@@ -165,7 +165,6 @@ There are no prerequisites, it's an importable go library. If you're using a bac
 <!-- ROADMAP -->
 ## Roadmap
 
-- [ ] Add CRON trigger
 - [ ] Add Cockroachdb backend support
 - [ ] Add Natural language trigger
 
