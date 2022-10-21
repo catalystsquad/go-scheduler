@@ -301,7 +301,6 @@ func TestCronTriggerNoRetry(t *testing.T, store pkg.StoreInterface) {
 	go scheduler.Run()
 	require.NoError(t, err)
 	time.Sleep(7 * time.Second)
-	require.Equal(t, 3, executionCount) // every 2 seconds without retries in 7 seconds should be 3 executions
 	// between 3 and 4 executions depending on resources
 	require.GreaterOrEqual(t, executionCount, 3)
 	require.LessOrEqual(t, executionCount, 4)
