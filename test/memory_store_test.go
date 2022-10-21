@@ -2,10 +2,8 @@ package test
 
 import (
 	"github.com/catalystsquad/go-scheduler/pkg"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"testing"
-	"time"
 )
 
 type MemoryStoreSuite struct {
@@ -27,74 +25,55 @@ func TestMemoryStoreSuite(t *testing.T) {
 
 func (s *MemoryStoreSuite) TestMemoryStoreHappyPath() {
 	store := pkg.NewMemoryStore()
-	TestSchedulerHappyPath(s.T(), store)
+	TestExecuteOnceTriggerHappyPath(s.T(), store)
 }
 
 func (s *MemoryStoreSuite) TestMemoryStoreTasksRunInOrder() {
 	store := pkg.NewMemoryStore()
-	TestSchedulerTasksRunInOrder(s.T(), store)
+	TestExecuteOnceTriggerTasksRunInOrder(s.T(), store)
 }
 
-func (s *MemoryStoreSuite) TestBigCacheStoreLongRunningTaskExpired() {
+func (s *MemoryStoreSuite) TestMemoryStoreLongRunningTaskExpired() {
 	store := pkg.NewMemoryStore()
-	TestSchedulerLongRunningTaskExpired(s.T(), store)
+	TestExecuteOnceTriggerLongRunningTaskExpired(s.T(), store)
 }
 
 func (s *MemoryStoreSuite) TestMemoryStoreLongRunningTaskNotExpired() {
 	store := pkg.NewMemoryStore()
-	TestSchedulerLongRunningTaskNotExpired(s.T(), store)
+	TestExecuteOnceTriggerLongRunningTaskNotExpired(s.T(), store)
 }
 
 func (s *MemoryStoreSuite) TestMemoryStoreRetry() {
 	store := pkg.NewMemoryStore()
-	TestSchedulerRetry(s.T(), store)
+	TestExecuteOnceTriggerRetry(s.T(), store)
 }
 
 func (s *MemoryStoreSuite) TestMemoryStoreNoRetry() {
 	store := pkg.NewMemoryStore()
-	TestSchedulerNoRetry(s.T(), store)
+	TestExecuteOnceTriggerNoRetry(s.T(), store)
 }
 
-func (s *MemoryStoreSuite) TestGetUpcomingTasksAllUnderLimit() {
+func (s *MemoryStoreSuite) TestMemoryStoreCronTriggerHappyPath() {
 	store := pkg.NewMemoryStore()
-	err := store.Initialize()
-	require.NoError(s.T(), err)
-	numTasks := 10
-	tasks := make([]pkg.Task, numTasks)
-	for i := numTasks; i > 0; i-- {
-		fireAt := time.Now().Add(time.Duration(i) * time.Second)
-		task := GenerateExecuteOnceTask(&fireAt)
-		err = store.ScheduleTask(task)
-		require.NoError(s.T(), err)
-		tasks[i-1] = task
-	}
-	upcomingTasks, err := store.GetUpcomingTasks(time.Now().Add(1 * time.Minute))
-	require.NoError(s.T(), err)
-	require.Len(s.T(), upcomingTasks, numTasks)
-	for i, task := range upcomingTasks {
-		require.Equal(s.T(), tasks[i].Id, task.Id)
-	}
+	TestCronTriggerHappyPath(s.T(), store)
 }
 
-func (s *MemoryStoreSuite) TestGetUpcomingTasksSomeOverLimit() {
+func (s *MemoryStoreSuite) TestMemoryStoreCronTriggerRetry() {
 	store := pkg.NewMemoryStore()
-	err := store.Initialize()
-	require.NoError(s.T(), err)
-	numTasks := 20
-	numLimit := 13
-	tasks := make([]pkg.Task, numTasks)
-	for i := numTasks; i > 0; i-- {
-		fireAt := time.Now().Add(time.Duration(i) * time.Second)
-		task := GenerateExecuteOnceTask(&fireAt)
-		err = store.ScheduleTask(task)
-		require.NoError(s.T(), err)
-		tasks[i-1] = task
-	}
-	limit := tasks[numLimit].GetTrigger().GetNextFireTime()
-	upcomingTasks, err := store.GetUpcomingTasks(*limit)
-	require.NoError(s.T(), err)
-	require.Len(s.T(), upcomingTasks, numLimit+1) // + 1 because the limit is inclusive, so we'll get the task at index numLimit back as well
-	for i, task := range upcomingTasks {
-		require.Equal(s.T(), tasks[i].Id, task.Id)
-	}
+	TestCronTriggerRetry(s.T(), store)
 }
+
+func (s *MemoryStoreSuite) TestMemoryStoreCronTriggerNoRetry() {
+	store := pkg.NewMemoryStore()
+	TestCronTriggerNoRetry(s.T(), store)
+}
+
+//func (s *MemoryStoreSuite) TestCronStuff() {
+//	// every 5 seconds
+//	cronTrigger, err := pkg.NewCronTrigger(fmt.Sprintf(everyNSecondsCronFormat, 5))
+//	require.NoError(s.T(), err)
+//	for i := 0; i < 16; i++ {
+//		logging.Log.WithFields(logrus.Fields{"next_Time": cronTrigger.GetNextFireTime(task)}).Info("cron")
+//		time.Sleep(1 * time.Second)
+//	}
+//}

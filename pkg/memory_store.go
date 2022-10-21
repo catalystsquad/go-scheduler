@@ -23,11 +23,15 @@ func (m *MemoryStore) Initialize() error {
 func (m *MemoryStore) ScheduleTask(task Task) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
+	m.ScheduleTaskInScheduleTree(task)
+	m.taskTree.Put(task.IdString(), task)
+	return nil
+}
+
+func (m *MemoryStore) ScheduleTaskInScheduleTree(task Task) {
 	scheduleKey := GetScheduleTreeKey(task)
 	taskId := task.IdString()
 	m.scheduleTree.Put(scheduleKey, taskId) // only store the ID for less memory usage
-	m.taskTree.Put(taskId, task)
-	return nil
 }
 
 func (m *MemoryStore) UpdateTask(task Task) error {
@@ -60,14 +64,27 @@ func (m *MemoryStore) GetUpcomingTasks(limit time.Time) ([]Task, error) {
 		}
 		id := value.(string)
 		taskValue, found := m.taskTree.Get(id)
-		if found {
+		if shouldReturnTask(found, timestamp, taskValue) {
 			tasks = append(tasks, taskValue.(Task))
 		} else {
-			// task doesn't exist, remove it from the schedule tree
+			// task doesn't exist or the next fire time has been updated by the scheduler, remove it from the schedule tree
 			m.scheduleTree.Remove(key)
+			if found {
+				// task still exists but has a different fire time, add the task to the schedule tree with the new fire time
+				m.ScheduleTaskInScheduleTree(taskValue.(Task))
+			}
 		}
 	}
 	return tasks, nil
+}
+
+func shouldReturnTask(found bool, keyTimestamp time.Time, taskValue interface{}) bool {
+	if !found {
+		return false
+	}
+	task := taskValue.(Task)
+	taskNextFireTime := task.NextFireTime
+	return keyTimestamp.Format(time.RFC3339Nano) == taskNextFireTime.Format(time.RFC3339Nano)
 }
 
 func NewMemoryStore() StoreInterface {

@@ -8,11 +8,14 @@ import (
 
 type Task struct {
 	Id                 *uuid.UUID
-	Metadata           interface{}
-	RetryOnError       bool
-	ExpireAfter        *time.Duration
-	InProgressAt       *time.Time
-	ExecuteOnceTrigger *ExecuteOnceTrigger
+	Metadata           interface{}         `json:"metadata"`
+	RetryOnError       bool                `json:"retry_on_error"`
+	ExpireAfter        *time.Duration      `json:"expire_after"`
+	InProgress         bool                `json:"in_progress_at"`
+	LastFireTime       *time.Time          `json:"last_fire_time"`
+	NextFireTime       *time.Time          `json:"next_fire_time"`
+	ExecuteOnceTrigger *ExecuteOnceTrigger `json:"execute_once_trigger"`
+	CronTrigger        *CronTrigger        `json:"cron_trigger"`
 }
 
 func (t Task) GetIdBytes() []byte {
@@ -30,7 +33,12 @@ func TaskFromBytes(bytes []byte) (Task, error) {
 }
 
 func (t Task) GetTrigger() TriggerInterface {
-	return t.ExecuteOnceTrigger
+	if t.CronTrigger != nil {
+		return t.CronTrigger
+	} else if t.ExecuteOnceTrigger != nil {
+		return t.ExecuteOnceTrigger
+	}
+	return nil
 }
 
 func (t Task) IdString() string {
