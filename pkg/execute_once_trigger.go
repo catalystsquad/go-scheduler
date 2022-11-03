@@ -8,7 +8,7 @@ type ExecuteOnceTrigger struct {
 	FireAt time.Time `json:"fire_at"`
 }
 
-func (t ExecuteOnceTrigger) GetNextFireTime(task Task) *time.Time {
+func (t ExecuteOnceTrigger) GetNextFireTime(task TaskDefinition) *time.Time {
 	return &t.FireAt
 }
 

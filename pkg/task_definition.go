@@ -6,33 +6,32 @@ import (
 	"time"
 )
 
-type Task struct {
+type TaskDefinition struct {
 	Id                 *uuid.UUID
 	Metadata           interface{}         `json:"metadata"`
 	RetryOnError       bool                `json:"retry_on_error"`
 	ExpireAfter        *time.Duration      `json:"expire_after"`
-	InProgress         bool                `json:"in_progress_at"`
-	LastFireTime       *time.Time          `json:"last_fire_time"`
 	NextFireTime       *time.Time          `json:"next_fire_time"`
+	TaskInstances      []TaskInstance      `json:"task_instances"`
 	ExecuteOnceTrigger *ExecuteOnceTrigger `json:"execute_once_trigger"`
 	CronTrigger        *CronTrigger        `json:"cron_trigger"`
 }
 
-func (t Task) GetIdBytes() []byte {
+func (t TaskDefinition) GetIdBytes() []byte {
 	return []byte(t.Id.String())
 }
 
-func (t Task) AsBytes() ([]byte, error) {
+func (t TaskDefinition) AsBytes() ([]byte, error) {
 	return json.Marshal(t)
 }
 
-func TaskFromBytes(bytes []byte) (Task, error) {
-	task := Task{}
+func TaskFromBytes(bytes []byte) (TaskDefinition, error) {
+	task := TaskDefinition{}
 	err := json.Unmarshal(bytes, &task)
 	return task, err
 }
 
-func (t Task) GetTrigger() TriggerInterface {
+func (t TaskDefinition) GetTrigger() TriggerInterface {
 	if t.CronTrigger != nil {
 		return t.CronTrigger
 	} else if t.ExecuteOnceTrigger != nil {
@@ -41,6 +40,6 @@ func (t Task) GetTrigger() TriggerInterface {
 	return nil
 }
 
-func (t Task) IdString() string {
+func (t TaskDefinition) IdString() string {
 	return t.Id.String()
 }
