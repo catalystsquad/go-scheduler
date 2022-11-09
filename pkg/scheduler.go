@@ -1,32 +1,37 @@
 package pkg
 
 import (
-	"fmt"
 	"github.com/catalystsquad/app-utils-go/logging"
-	"github.com/emirpasic/gods/trees/btree"
 	"github.com/google/uuid"
 	"github.com/joomcode/errorx"
 	"github.com/sirupsen/logrus"
-	"strings"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 )
 
 type Scheduler struct {
-	Window       *time.Duration
-	Handler      func(task TaskDefinition) error
-	store        StoreInterface
-	scheduleTree *btree.Tree
-	lock         *sync.Mutex
+	ScheduleWindow *time.Duration
+	RunnerWindow   *time.Duration
+	CleanupWindow  *time.Duration
+	Handler        func(taskInstance TaskInstance) error
+	store          StoreInterface
+	lock           *sync.Mutex
+	run            bool
+	shutdown       chan bool
 }
 
-func NewScheduler(window time.Duration, handler func(task TaskDefinition) error, store StoreInterface) (*Scheduler, error) {
+func NewScheduler(scheduleWindow, runnerWindow, cleanupWindow time.Duration, handler func(task TaskInstance) error, store StoreInterface) (*Scheduler, error) {
 	scheduler := &Scheduler{
-		Window:       &window,
-		Handler:      handler,
-		store:        store,
-		scheduleTree: btree.NewWith(3, ScheduleTreeComparator),
-		lock:         new(sync.Mutex),
+		ScheduleWindow: &scheduleWindow,
+		RunnerWindow:   &runnerWindow,
+		CleanupWindow:  &cleanupWindow,
+		Handler:        handler,
+		store:          store,
+		lock:           new(sync.Mutex),
+		shutdown:       make(chan bool, 1),
 	}
 	err := scheduler.initializeStore()
 	return scheduler, err
@@ -37,10 +42,15 @@ func (s *Scheduler) CreateTaskDefinition(task TaskDefinition) error {
 	if err != nil {
 		return err
 	}
-	if task.ExpireAfter == nil {
-		task.ExpireAfter = s.Window
+	if task.ExpireAfter == 0 {
+		task.ExpireAfter = *s.ScheduleWindow
 	}
-	task.NextFireTime = task.GetTrigger().GetNextFireTime(task)
+	task.NextFireTime = task.GetNextFireTime()
+	task.Recurring = task.GetTrigger().IsRecurring()
+	if task.Id == nil || task.Id == &uuid.Nil {
+		id := uuid.New()
+		task.Id = &id
+	}
 	return s.store.CreateTaskDefinition(task)
 }
 
@@ -49,6 +59,7 @@ func (s *Scheduler) UpdateTaskDefinition(task TaskDefinition) error {
 	if err != nil {
 		return err
 	}
+	task.Recurring = task.GetTrigger().IsRecurring()
 	return s.store.UpdateTaskDefinition(task)
 }
 
@@ -59,16 +70,169 @@ func (s *Scheduler) DeleteTaskDefinition(id *uuid.UUID) error {
 	return s.store.DeleteTaskDefinition(id)
 }
 
-func (s *Scheduler) Run() error {
-	if s.Handler == nil {
-		return errorx.IllegalArgument.New("handler cannot be nil")
+func (s *Scheduler) Run() {
+	s.run = true
+	// start task instance scheduler, task instance runner, and task instance cleanup, in background
+	go s.startTaskInstanceScheduler()
+	go s.startTaskInstanceRunner()
+	go s.startTaskInstanceCleanup()
+	go s.waitForOsSignal()
+	// wait for shutdown from caller, or os
+	<-s.shutdown
+	s.shutDown()
+}
+
+func (s *Scheduler) startTaskInstanceScheduler() {
+	ticker := time.NewTicker(*s.ScheduleWindow)
+	for range ticker.C {
+		if s.run {
+			s.createTaskInstances()
+		} else {
+			ticker.Stop()
+			break
+		}
 	}
-	//ticker := time.NewTicker(*s.Window)
-	//for c := range ticker.C {
-	//	s.scheduleJobs(c)
-	//	s.consumeTasks()
-	//}
-	return nil
+}
+
+func (s *Scheduler) createTaskInstances() {
+	taskDefinitions, err := s.store.GetTaskDefinitionsToSchedule(time.Now().Add(*s.ScheduleWindow))
+	if err != nil {
+		logging.Log.WithError(err).Error("error getting task definitions to run in window")
+		return
+	}
+	for _, taskDefinition := range taskDefinitions {
+		err = s.createTaskInstance(taskDefinition)
+		if err != nil {
+			logging.Log.WithError(err).Error("error creating task instance")
+		}
+	}
+}
+
+func (s *Scheduler) createTaskInstance(taskDefinition TaskDefinition) error {
+	executeAt := taskDefinition.GetNextFireTime()
+	expiresAt := executeAt.Add(taskDefinition.ExpireAfter)
+	taskInstance := TaskInstance{
+		ExpiresAt:      &expiresAt,
+		ExecuteAt:      executeAt,
+		TaskDefinition: taskDefinition,
+	}
+	err := s.store.CreateTaskInstance(taskInstance)
+	if err != nil {
+		logging.Log.WithError(err).Error("error creating task instance")
+		return err
+	}
+	// update task definition's next fire time, nil for non recurring triggers which will prevent creating more task instances
+	if taskDefinition.Recurring {
+		nextExecution := *taskDefinition.GetFireTimeFrom(*executeAt)
+		taskDefinition.NextFireTime = &nextExecution
+	} else {
+		taskDefinition.NextFireTime = nil
+	}
+	err = s.store.UpdateTaskDefinition(taskDefinition)
+	if err != nil {
+		logging.Log.WithError(err).WithFields(logrus.Fields{"id": taskDefinition.Id}).Error("error setting task definition next execution time")
+	}
+	return err
+}
+
+func (s *Scheduler) startTaskInstanceRunner() {
+	ticker := time.NewTicker(*s.RunnerWindow)
+	for range ticker.C {
+		if s.run {
+			s.scheduleTaskInstanceRuns()
+		} else {
+			ticker.Stop()
+			break
+		}
+	}
+}
+
+func (s *Scheduler) scheduleTaskInstanceRuns() {
+	// query for task instances that should be run
+	taskInstances, err := s.store.GetTaskInstancesToRun(time.Now().Add(*s.ScheduleWindow))
+	if err != nil {
+		logging.Log.WithError(err).Error("error getting task instances to run")
+		return
+	}
+	// handle each instance in a goroutine, the goroutine will sleep until its scheduled fire time
+	for _, taskInstance := range taskInstances {
+		go s.handleTaskInstance(taskInstance)
+	}
+}
+
+func (s *Scheduler) handleTaskInstance(taskInstance TaskInstance) {
+	// sleep until the execution time
+	time.Sleep(time.Until(*taskInstance.ExecuteAt))
+	// mark task in progress
+	err := s.markTaskInstanceInProgress(taskInstance)
+	if err != nil {
+		return
+	}
+	// call handler
+	err = s.Handler(taskInstance)
+	if err == nil {
+		// no error, mark instance completed
+		err = s.store.MarkTaskInstanceComplete(taskInstance)
+		if err != nil {
+			logging.Log.WithError(err).WithFields(logrus.Fields{"task_instance_id": taskInstance.Id, "task_definition_id": taskInstance.TaskDefinition.Id}).Error("error setting task instance completed_at")
+		}
+	}
+}
+
+func (s *Scheduler) markTaskInstanceInProgress(taskInstance TaskInstance) error {
+	startedAt := time.Now().UTC()
+	expiresAt := startedAt.Add(taskInstance.TaskDefinition.ExpireAfter)
+	taskInstance.StartedAt = &startedAt
+	taskInstance.ExpiresAt = &expiresAt
+	err := s.store.UpdateTaskInstance(taskInstance)
+	if err != nil {
+		logging.Log.WithError(err).WithFields(logrus.Fields{"task_instance_id": taskInstance.Id, "task_definition_id": taskInstance.TaskDefinition.Id}).Error("error setting task instance started_at")
+	}
+	return err
+}
+
+func (s *Scheduler) startTaskInstanceCleanup() {
+	ticker := time.NewTicker(*s.CleanupWindow)
+	for range ticker.C {
+		if s.run {
+			s.cleanUp()
+		} else {
+			ticker.Stop()
+			break
+		}
+	}
+}
+
+// cleanUp() queries for completed task instances, then deletes the completed task instances, and then deletes
+// the associated
+func (s *Scheduler) cleanUp() {
+	// delete completed task instances
+	err := s.store.DeleteCompletedTaskInstances()
+	if err != nil {
+		logging.Log.WithError(err).Error("error deleting completed task instances")
+	}
+	// delete task definitions with no task instances
+	err = s.store.DeleteCompletedTaskDefinitions()
+	if err != nil {
+		logging.Log.WithError(err).Error("error deleting completed task definitions")
+	}
+}
+
+func (s *Scheduler) waitForOsSignal() {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	receivedSignal := <-signals
+	logging.Log.WithFields(logrus.Fields{"signal": receivedSignal}).Info("scheduler exiting due to os signal")
+	s.shutdown <- true
+}
+
+func (s *Scheduler) Stop() {
+	s.shutdown <- true
+}
+
+func (s *Scheduler) shutDown() {
+	s.run = false
+	logging.Log.Info("scheduler stopped")
 }
 
 func validateTask(task TaskDefinition) error {
@@ -78,142 +242,12 @@ func validateTask(task TaskDefinition) error {
 	if task.Metadata == nil {
 		return errorx.IllegalArgument.New("tasks must have metadata")
 	}
+	if task.GetTrigger() == nil {
+		return errorx.IllegalArgument.New("tasks must have a trigger")
+	}
 	return nil
 }
 
-func (s *Scheduler) scheduleJobs(firedAt time.Time) {
-	limit := firedAt.Add(*s.Window)
-	upcomingTasks, err := s.store.GetTaskInstancesToRun(limit)
-	logging.Log.WithFields(logrus.Fields{"count": len(upcomingTasks)}).Debug("got upcoming tasks")
-	if err != nil {
-		logging.Log.WithError(err).Error("error fetching upcoming tasks")
-		return
-	}
-	for _, task := range upcomingTasks {
-		s.addTaskToTree(task)
-	}
-}
-
-//func (s *Scheduler) shouldHandleTask(task TaskDefinition) bool {
-//	if !task.InProgress {
-//		// not in progress, so we should handle it
-//		return true
-//	}
-//	// check the expiration time, if it's expired then that means it's run before but wasn't completed for some reason
-//	// so we should run it again
-//	expirationTime := task.LastFireTime.Add(*task.ExpireAfter)
-//	return time.Now().After(expirationTime)
-//}
-
-//func (s *Scheduler) handleTask(task TaskDefinition) {
-//	// execute the handler
-//	err := s.Handler(task)
-//	if err == nil || !task.RetryOnError {
-//		// either no error, or there is an error but task shouldn't be retried, so update the next fire time so it doesn't get
-//		// picked up again in the next window
-//		s.updateNextFireTime(task)
-//	} else {
-//		// just log the error, task will get picked up again in the next execution window since the fire time wasn't updated
-//		logging.Log.WithError(err).WithFields(logrus.Fields{"id": task.Id}).Error("error handling task")
-//	}
-//}
-
-//func (s *Scheduler) markTaskInProgress(task *TaskDefinition) error {
-//	task.InProgress = true
-//	task.LastFireTime = task.NextFireTime
-//	logging.Log.Debug("setting task in progress")
-//	return s.store.UpdateTask(*task)
-//}
-//
-//func (s *Scheduler) updateNextFireTime(task TaskDefinition) {
-//	var err error
-//	nextFireTime := time.Time{}
-//	trigger := task.GetTrigger()
-//	if trigger.IsRecurring() {
-//		task.InProgress = false
-//		nextFireTime = *task.GetTrigger().GetNextFireTime(task)
-//		task.NextFireTime = &nextFireTime
-//		logging.Log.WithFields(logrus.Fields{"current_time": time.Now().UTC().Format(time.RFC3339Nano), "next_fire_time": nextFireTime.Format(time.RFC3339Nano)}).Debug("scheduler setting next fire time for recurring trigger")
-//		err = s.store.UpdateTask(task)
-//	} else {
-//		logging.Log.Debug("scheduler deleting task because trigger is non-recurring")
-//		err = s.store.DeleteTask(task.Id)
-//	}
-//	if err != nil {
-//		logging.Log.WithError(err).WithFields(logrus.Fields{"task_id": task.Id.String()}).Error("error updating or deleting task when updating next fire time")
-//	}
-//}
-
 func (s *Scheduler) initializeStore() error {
 	return s.store.Initialize()
-}
-
-func (s *Scheduler) addTaskToTree(task TaskInstance) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	s.scheduleTree.Put(GetScheduleTreeKey(task), &task)
-}
-
-func (s *Scheduler) popTaskFromTree() *TaskDefinition {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	key := s.scheduleTree.LeftKey()
-	value := s.scheduleTree.LeftValue()
-	if value != nil {
-		s.scheduleTree.Remove(key)
-		task := value.(*TaskDefinition)
-		return task
-	} else {
-		return nil
-	}
-}
-
-//func (s *Scheduler) consumeTasks() {
-//	run := true
-//	for run {
-//		task := s.popTaskFromTree()
-//		if task == nil {
-//			run = false // no more tasks left to handle
-//		} else {
-//			if s.shouldHandleTask(*task) {
-//				// mark task in progress
-//				err := s.markTaskInProgress(task)
-//				if err == nil {
-//					// task set as in progress handle the task
-//					go s.handleTask(*task)
-//				} else {
-//					// failed to mark the task in progress, don't call the handler, will try again in the next window execution
-//					logging.Log.WithError(err).WithFields(logrus.Fields{"task_id": task.Id}).Error("error marking task in progress")
-//				}
-//			}
-//		}
-//	}
-//}
-
-func ScheduleTreeComparator(a, b interface{}) int {
-	aTime, err := getTimestampFromScheduleKey(a.(string))
-	if err != nil {
-		logging.Log.WithError(err).WithFields(logrus.Fields{"key_value": a}).Error("error comparing keys")
-	}
-	bTime, err := getTimestampFromScheduleKey(b.(string))
-	if err != nil {
-		logging.Log.WithError(err).WithFields(logrus.Fields{"key_value": b}).Error("error comparing keys")
-	}
-	switch {
-	case aTime.Before(bTime):
-		return -1
-	case aTime.After(bTime):
-		return 1
-	default:
-		return 0
-	}
-}
-
-func GetScheduleTreeKey(taskInstance TaskInstance) string {
-	return fmt.Sprintf("%s_%s", taskInstance.ExecuteAt.Format(time.RFC3339), taskInstance.Id.String())
-}
-
-func getTimestampFromScheduleKey(key string) (time.Time, error) {
-	timestampString := strings.Split(key, "_")[0]
-	return time.Parse(time.RFC3339Nano, timestampString)
 }

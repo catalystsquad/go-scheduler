@@ -17,5 +17,10 @@ type StoreInterface interface {
 	ListTaskInstances(offset, limit int) ([]TaskInstance, error)
 	UpdateTaskInstance(taskInstance TaskInstance) error
 	DeleteTaskInstance(id *uuid.UUID) error
+	GetTaskDefinitionsToSchedule(limit time.Time) ([]TaskDefinition, error)
 	GetTaskInstancesToRun(limit time.Time) ([]TaskInstance, error)
+	// markTaskInstanceComplete() should also mark the task definition complete, if the definition is non-recurring
+	MarkTaskInstanceComplete(instance TaskInstance) error
+	DeleteCompletedTaskInstances() error
+	DeleteCompletedTaskDefinitions() error
 }

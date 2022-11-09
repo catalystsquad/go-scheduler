@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/brianvoe/gofakeit/v6 v6.19.0
 	github.com/catalystsquad/app-utils-go v1.0.5
+	github.com/cockroachdb/cockroach-go/v2 v2.2.16
 	github.com/dariubs/gorm-jsonb v0.1.5
 	github.com/emirpasic/gods v1.18.1
 	github.com/google/uuid v1.3.0
@@ -15,7 +16,8 @@ require (
 	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.0
 	gorm.io/driver/postgres v1.3.5
-	gorm.io/gorm v1.23.5
+	gorm.io/driver/sqlite v1.4.3
+	gorm.io/gorm v1.24.0
 )
 
 require (
@@ -36,8 +38,9 @@ require (
 	github.com/jackc/pgtype v1.12.0 // indirect
 	github.com/jackc/pgx/v4 v4.17.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
-	github.com/jinzhu/now v1.1.4 // indirect
+	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/lib/pq v1.10.7 // indirect
+	github.com/mattn/go-sqlite3 v1.14.15 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.0.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect

@@ -15,6 +15,7 @@ import (
 
 var cockroachdbContainer *gnomock.Container
 var cockroachdbStore pkg.StoreInterface
+var scheduler pkg.Scheduler
 
 const dbName = "test"
 const dbPort = 26257
@@ -56,64 +57,30 @@ func (s *CockroachdbStoreSuite) TearDownSuite() {
 }
 
 func (s *CockroachdbStoreSuite) SetupTest() {
+	// delete all before each test
+	require.NoError(s.T(), deleteAllTaskDefinitions(cockroachdbStore))
 }
 
 func TestCockroachdbStoreSuite(t *testing.T) {
 	suite.Run(t, new(CockroachdbStoreSuite))
 }
 
-func (s *CockroachdbStoreSuite) TestTaskDefinitionCrud() {
-	TestTaskDefinitionCrud(s.T(), cockroachdbStore)
+func (s *CockroachdbStoreSuite) TestCockroachdbStoreHappyPath() {
+	TestExecuteOnceTriggerHappyPath(s.T(), cockroachdbStore)
 }
 
-func (s *CockroachdbStoreSuite) TestTaskInstanceCrud() {
-	TestTaskInstanceCrud(s.T(), cockroachdbStore)
+func (s *CockroachdbStoreSuite) TestCockroachdbStoreTasksRunInOrder() {
+	TestExecuteOnceTriggerTasksRunInOrder(s.T(), cockroachdbStore)
 }
 
-func (s *CockroachdbStoreSuite) TestGetTaskInstancesToRunNotInprogressNotExpired() {
-	TestGetTaskInstancesToRunNotInProgressNotExpired(s.T(), cockroachdbStore)
+func (s *CockroachdbStoreSuite) TestCockroachdbStoreLongRunningTaskExpired() {
+	TestExecuteOnceTriggerLongRunningTaskExpired(s.T(), cockroachdbStore)
 }
 
-func (s *CockroachdbStoreSuite) TestGetTaskInstancesToRunInProgressNotExpired() {
-	TestGetTaskInstancesToRunInProgressNotExpired(s.T(), cockroachdbStore)
+func (s *CockroachdbStoreSuite) TestCockroachdbStoreLongRunningTaskNotExpired() {
+	TestExecuteOnceTriggerLongRunningTaskNotExpired(s.T(), cockroachdbStore)
 }
 
-func (s *CockroachdbStoreSuite) TestGetTaskInstancesToRunInProgressAndExpired() {
-	TestGetTaskInstancesToRunInProgressAndExpired(s.T(), cockroachdbStore)
+func (s *CockroachdbStoreSuite) TestCockroachdbStoreCronTriggerHappyPath() {
+	TestCronTriggerHappyPath(s.T(), cockroachdbStore)
 }
-
-//func (s *CockroachdbStoreSuite) TestCockroachdbStoreHappyPath() {
-//	TestExecuteOnceTriggerHappyPath(s.T(), cockroachdbStore)
-//}
-//
-//func (s *CockroachdbStoreSuite) TestCockroachdbStoreTasksRunInOrder() {
-//	TestExecuteOnceTriggerTasksRunInOrder(s.T(), cockroachdbStore)
-//}
-//
-//func (s *CockroachdbStoreSuite) TestCockroachdbStoreLongRunningTaskExpired() {
-//	TestExecuteOnceTriggerLongRunningTaskExpired(s.T(), cockroachdbStore)
-//}
-//
-//func (s *CockroachdbStoreSuite) TestCockroachdbStoreLongRunningTaskNotExpired() {
-//	TestExecuteOnceTriggerLongRunningTaskNotExpired(s.T(), cockroachdbStore)
-//}
-//
-//func (s *CockroachdbStoreSuite) TestCockroachdbStoreRetry() {
-//	TestExecuteOnceTriggerRetry(s.T(), cockroachdbStore)
-//}
-//
-//func (s *CockroachdbStoreSuite) TestCockroachdbStoreNoRetry() {
-//	TestExecuteOnceTriggerNoRetry(s.T(), cockroachdbStore)
-//}
-//
-//func (s *CockroachdbStoreSuite) TestCockroachdbStoreCronTriggerHappyPath() {
-//	TestCronTriggerHappyPath(s.T(), cockroachdbStore)
-//}
-//
-//func (s *CockroachdbStoreSuite) TestCockroachdbStoreCronTriggerRetry() {
-//	TestCronTriggerRetry(s.T(), cockroachdbStore)
-//}
-//
-//func (s *CockroachdbStoreSuite) TestCockroachdbStoreCronTriggerNoRetry() {
-//	TestCronTriggerNoRetry(s.T(), cockroachdbStore)
-//}

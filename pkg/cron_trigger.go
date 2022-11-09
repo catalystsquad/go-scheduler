@@ -12,8 +12,8 @@ type CronTrigger struct {
 	cronexpr   *cronexpr.Expression `json:"cronexpr"`
 }
 
-func (t CronTrigger) GetNextFireTime(task TaskDefinition) *time.Time {
-	nextFireTime := t.cronexpr.Next(time.Now())
+func (t CronTrigger) GetFireTime(from time.Time) *time.Time {
+	nextFireTime := t.cronexpr.Next(from)
 	return &nextFireTime
 }
 

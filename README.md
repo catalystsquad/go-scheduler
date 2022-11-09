@@ -89,10 +89,10 @@ Distinct Features:
 * Configurable execution window to control resource usage
 
 Implemented Backends:
-* Memory - An in-memory b-tree, useful for toys/testing
+* Cockroachdb - To allow horizontal scalability, useful for real-world production scenarios
 
 Planned Backends:
-* Cockroachdb - To allow horizontal scalability, useful for real-world production scenarios
+* Memory - An in-memory backend, useful for toys/testing
 
 Implemented Triggers:
 * ExecuteOnce - Executes once at the specified time, respects retries and expiration
@@ -107,6 +107,11 @@ FAQ:
 * What does the `ExpireAfter` field on a task do?
   * This setting is used for fault tolerance. The backend store tracks when a task is in progress. If a task's scheduled time is in the past, the store will re-schedule the task if the `ExpireAfter` has passed. This would happen if there was some failure to update the task in the store, or if the handler hung, or something like that so that the task doesn't just get dropped. This lets you have handler functions that run longer than the execution window without executing multiple times.
 
+Design:
+The scheduler runs 3 goroutines on tickers that each have distinct concerns but don't care about each other. This design is intended to ease troubleshooting, implementation, and maintenance by avoiding complex logic through separation of concerns.
+1. Scheduler routine queries for task definitions that should run in the next window, and creates task instances accordingly. When a task instance is created, the scheduler also updates the task definition's `next_fire_time` based on the definition's trigger
+2. Task runner routine queries for task instances that should run in the next window and haven't run yet, or are expired, and runs them at their specified time. The runner also sets the task instance's `started_at` time when the  handler is called, and sets the `completed_at` time when the handler is finished, if the handler is successful
+3. Cleanup routine deletes completed task instances and task definitions if appropriate.
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
@@ -122,10 +127,14 @@ FAQ:
 <!-- GETTING STARTED -->
 ## Getting Started
 
-This example uses the memory store, you can use any store that exists or PR your own.
+This example uses the cockroachdb store, ran via gnomock, you can use any store that exists or PR your own.
 ```go
-// instantiate a store
-store := pkg.NewMemoryStore()
+// start a gnomock cockroach container
+dbName := "test"
+cockroachdbContainer, err := gnomock.Start(cockroachdb.Preset(cockroachdb.WithDatabase(dbName)))
+uri := fmt.Sprintf("host=%s port=%d dbname=%s user=%s password=%s sslmode=disable",cockroachdbContainer.Host, cockroachdbContainer.DefaultPort(), dbName, "root", "")
+// instantiate a new store
+cockroachdbStore := cockroachdb_store.NewCockroachdbStore(uri, nil)
 // define a handler function
 handler := func(task pkg.Task) error {
   fmt.Println("handling a task")
@@ -143,7 +152,6 @@ expireAfter := 10 * time.Second
 task := pkg.Task{
   Id:                 &id,
   Metadata:           metaData,
-  RetryOnError: true,
   ExpireAfter: &expireAfter,
   ExecuteOnceTrigger: pkg.NewExecuteOnceTrigger(executeAt),
 }

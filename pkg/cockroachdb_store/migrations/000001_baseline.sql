@@ -5,12 +5,13 @@ create table task_definitions
     created_at  int not null,
     updated_at  int not null,
     metadata jsonb,
-    retry_on_error bool,
     expire_after int64,
     expire_after_interval interval,
     in_progress bool,
     last_fire_time timestamptz,
-    next_fire_time timestamptz
+    next_fire_time timestamptz,
+    completed_at timestamptz,
+    recurring bool
 );
 
 create table task_instances

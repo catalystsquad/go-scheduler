@@ -4,15 +4,15 @@ import (
 	"encoding/json"
 	"github.com/catalystsquad/go-scheduler/pkg"
 	"github.com/dariubs/gorm-jsonb"
+	"github.com/google/uuid"
 	"time"
 )
 
 type TaskDefinition struct {
-	Id                  string              `json:"id" gorm:"primaryKey"`
+	Id                  *uuid.UUID          `json:"id" gorm:"primaryKey"`
 	CreatedAt           int64               `json:"created_at,string" gorm:"autoCreateTime:nano"`
 	UpdatedAt           int64               `json:"updated_at,string" gorm:"autoUpdateTime:nano"`
 	Metadata            gormjsonb.JSONB     `json:"metadata" gorm:"type:jsonb"`
-	RetryOnError        bool                `json:"retry_on_error"`
 	ExpireAfter         *time.Duration      `json:"expire_after"`
 	ExpireAfterInterval *string             `json:"expire_after_interval"`
 	InProgress          bool                `json:"in_progress_at"`
@@ -20,9 +20,12 @@ type TaskDefinition struct {
 	NextFireTime        *time.Time          `json:"next_fire_time"`
 	ExecuteOnceTrigger  *ExecuteOnceTrigger `json:"execute_once_trigger" gorm:"foreignKey:Id"`
 	CronTrigger         *CronTrigger        `json:"cron_trigger" gorm:"foreignKey:Id"`
+	CompletedAt         *time.Time          `json:"completed_at"`
+	TaskInstances       []TaskInstance      `json:"task_instances"`
+	Recurring           bool
 }
 
-func (t TaskDefinition) ToTask() (pkg.TaskDefinition, error) {
+func (t TaskDefinition) ToTaskDefinition() (pkg.TaskDefinition, error) {
 	var task pkg.TaskDefinition
 	taskModelJsonBytes, err := json.Marshal(t)
 	if err != nil {
@@ -39,10 +42,10 @@ func (t TaskDefinition) ToTask() (pkg.TaskDefinition, error) {
 	return task, err
 }
 
-func ToTasks(models []TaskDefinition) ([]pkg.TaskDefinition, error) {
+func ToTaskDefinitions(models []TaskDefinition) ([]pkg.TaskDefinition, error) {
 	tasks := []pkg.TaskDefinition{}
 	for _, model := range models {
-		task, err := model.ToTask()
+		task, err := model.ToTaskDefinition()
 		if err != nil {
 			return nil, err
 		}
