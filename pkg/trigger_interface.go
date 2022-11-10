@@ -5,6 +5,6 @@ import (
 )
 
 type TriggerInterface interface {
-	GetNextFireTime(task Task) *time.Time
+	GetFireTime(from time.Time) *time.Time
 	IsRecurring() bool
 }

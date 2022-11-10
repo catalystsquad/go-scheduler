@@ -5,19 +5,15 @@ import (
 	"time"
 )
 
+const oncePerSecondCron = "* * * * * * *"
+
 type CronTrigger struct {
-	expression *cronexpr.Expression
+	Expression string               `json:"expression"`
+	cronexpr   *cronexpr.Expression `json:"cronexpr"`
 }
 
-func (t CronTrigger) GetNextFireTime(task Task) *time.Time {
-	var nextFireTime time.Time
-	nextFireTimes := t.expression.NextN(time.Now(), 2)
-	if task.LastFireTime != nil && task.LastFireTime.Equal(nextFireTimes[0]) {
-		// this can happen if the task executes faster than the tick rate, in which case, schedule the task for the next scheduled time
-		nextFireTime = nextFireTimes[1]
-	} else {
-		nextFireTime = nextFireTimes[0]
-	}
+func (t CronTrigger) GetFireTime(from time.Time) *time.Time {
+	nextFireTime := t.cronexpr.Next(from)
 	return &nextFireTime
 }
 
@@ -26,9 +22,16 @@ func (t CronTrigger) IsRecurring() bool {
 }
 
 func NewCronTrigger(cronExpression string) (*CronTrigger, error) {
-	expression, err := cronexpr.Parse(cronExpression)
+	// default to once per second
+	if cronExpression == "" {
+		cronExpression = oncePerSecondCron
+	}
+	cronexpr, err := cronexpr.Parse(cronExpression)
 	if err != nil {
 		return nil, err
 	}
-	return &CronTrigger{expression: expression}, nil
+	return &CronTrigger{
+		Expression: cronExpression,
+		cronexpr:   cronexpr,
+	}, nil
 }
