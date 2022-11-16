@@ -58,6 +58,10 @@ func (s *Scheduler) GetTaskDefinitions(ids []*uuid.UUID) ([]TaskDefinition, erro
 	return s.store.GetTaskDefinitions(ids)
 }
 
+func (s *Scheduler) ListTaskDefinitions(skip, limit int) ([]TaskDefinition, error) {
+	return s.store.ListTaskDefinitions(skip, limit)
+}
+
 func (s *Scheduler) DeleteTaskDefinition(id *uuid.UUID) error {
 	if id == nil {
 		return errorx.IllegalArgument.New("an id must be provided")
