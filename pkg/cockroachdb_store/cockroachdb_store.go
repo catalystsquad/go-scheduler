@@ -152,21 +152,6 @@ func (c *CockroachdbStore) GetTaskDefinition(id *uuid.UUID) (pkg.TaskDefinition,
 	return taskDefinitionModel.ToTaskDefinition()
 }
 
-func (c *CockroachdbStore) UpdateTaskDefinition(taskDefinition pkg.TaskDefinition) error {
-	taskDefinitionModel, err := models.GetTaskDefinitionModelFromTaskDefinition(taskDefinition)
-	taskDefinitionModel.TaskInstances = nil
-	if err != nil {
-		return err
-	}
-	err = crdbgorm.ExecuteTx(context.Background(), c.db, nil, func(tx *gorm.DB) error {
-		return tx.Save(&taskDefinitionModel).Error
-	})
-	if err != nil {
-		logging.Log.WithError(err).Error("error scheduling task with cockroachdb store")
-	}
-	return err
-}
-
 func (c *CockroachdbStore) DeleteTaskDefinition(id *uuid.UUID) error {
 	err := crdbgorm.ExecuteTx(context.Background(), c.db, nil, func(tx *gorm.DB) error {
 		return tx.Delete(models.TaskDefinition{Id: id}).Error
@@ -198,36 +183,19 @@ func (c *CockroachdbStore) GetTaskInstancesToRun(limit time.Time) ([]pkg.TaskIns
 	return taskInstances, nil
 }
 
-func (c *CockroachdbStore) CreateTaskInstance(taskInstance pkg.TaskInstance) error {
+func (c *CockroachdbStore) UpsertTaskInstance(taskInstance pkg.TaskInstance) error {
 	taskInstanceModel, err := models.GetTaskInstanceModelFromTaskInstance(taskInstance)
-	if taskInstanceModel.Id == nil {
-		id := uuid.New()
-		taskInstanceModel.Id = &id
-	}
 	if err != nil {
 		return err
 	}
 	taskInstanceModel.TaskDefinition = nil
 	err = crdbgorm.ExecuteTx(context.Background(), c.db, nil, func(tx *gorm.DB) error {
-		return tx.Create(&taskInstanceModel).Error
+		return tx.Clauses(clause.OnConflict{
+			UpdateAll: true,
+		}).Create(&taskInstanceModel).Error
 	})
 	if err != nil {
 		logging.Log.WithError(err).Error("error creating task instance")
-	}
-	return err
-}
-
-func (c *CockroachdbStore) UpdateTaskInstance(taskInstance pkg.TaskInstance) error {
-	taskInstanceModel, err := models.GetTaskInstanceModelFromTaskInstance(taskInstance)
-	if err != nil {
-		return err
-	}
-	taskInstanceModel.TaskDefinition = nil
-	err = crdbgorm.ExecuteTx(context.Background(), c.db, nil, func(tx *gorm.DB) error {
-		return tx.Save(&taskInstanceModel).Error
-	})
-	if err != nil {
-		logging.Log.WithError(err).Error("error scheduling task with cockroachdb store")
 	}
 	return err
 }
@@ -277,35 +245,18 @@ func (c *CockroachdbStore) Initialize() (err error) {
 	return nil
 }
 
-func (c *CockroachdbStore) CreateTaskDefinition(taskDefinition pkg.TaskDefinition) error {
+func (c *CockroachdbStore) UpsertTaskDefinition(taskDefinition pkg.TaskDefinition) error {
 	taskDefinitionModel, err := models.GetTaskDefinitionModelFromTaskDefinition(taskDefinition)
 	if err != nil {
 		return err
 	}
 	err = crdbgorm.ExecuteTx(context.Background(), c.db, nil, func(tx *gorm.DB) error {
-		return tx.Create(&taskDefinitionModel).Error
+		return tx.Clauses(clause.OnConflict{
+			UpdateAll: true,
+		}).Create(&taskDefinitionModel).Error
 	})
 	if err != nil {
-		logging.Log.WithError(err).Error("error scheduling task with cockroachdb store")
+		logging.Log.WithError(err).Error("error upserting task with cockroachdb store")
 	}
 	return err
 }
-
-//func (c *CockroachdbStore) GetUpcomingTasks(limit time.Time) ([]pkg.TaskDefinition, error) {
-//	models := []models.TaskDefinition{}
-//	err := crdbgorm.ExecuteTx(context.Background(), c.db, nil, func(tx *gorm.DB) error {
-//		return tx.Preload(clause.Associations).Where("next_fire_time <= ? and (in_progress = false or age(last_fire_time) >= expire_after_interval)", limit.Format(time.RFC3339)).Order("next_fire_time").Find(&models).Error
-//	})
-//	if err != nil {
-//		logging.Log.WithError(err).Error("error scheduling task with cockroachdb store")
-//	}
-//	tasks := []pkg.TaskDefinition{}
-//	for _, model := range models {
-//		task, err := model.ToTaskDefinition()
-//		if err != nil {
-//			return nil, err
-//		}
-//		tasks = append(tasks, task)
-//	}
-//	return tasks, err
-//}
