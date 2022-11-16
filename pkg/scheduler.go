@@ -54,11 +54,19 @@ func (s *Scheduler) UpsertTaskDefinition(task TaskDefinition) error {
 	return s.store.UpsertTaskDefinition(task)
 }
 
+func (s *Scheduler) GetTaskDefinitions(ids []*uuid.UUID) ([]TaskDefinition, error) {
+	return s.store.GetTaskDefinitions(ids)
+}
+
 func (s *Scheduler) DeleteTaskDefinition(id *uuid.UUID) error {
 	if id == nil {
 		return errorx.IllegalArgument.New("an id must be provided")
 	}
 	return s.store.DeleteTaskDefinition(id)
+}
+
+func (s *Scheduler) DeleteTaskDefinitions(ids []*uuid.UUID) error {
+	return s.store.DeleteTaskDefinitions(ids)
 }
 
 func (s *Scheduler) Run() {

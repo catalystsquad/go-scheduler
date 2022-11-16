@@ -10,7 +10,9 @@ type StoreInterface interface {
 	UpsertTaskDefinition(definition TaskDefinition) error
 	ListTaskDefinitions(offset, limit int) ([]TaskDefinition, error)
 	GetTaskDefinition(id *uuid.UUID) (TaskDefinition, error)
+	GetTaskDefinitions(ids []*uuid.UUID) ([]TaskDefinition, error)
 	DeleteTaskDefinition(id *uuid.UUID) error
+	DeleteTaskDefinitions(ids []*uuid.UUID) error
 	UpsertTaskInstance(taskInstance TaskInstance) error
 	GetTaskInstance(id *uuid.UUID) (TaskInstance, error)
 	ListTaskInstances(offset, limit int) ([]TaskInstance, error)
