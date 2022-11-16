@@ -27,6 +27,25 @@ type CockroachdbStore struct {
 	config *gorm.Config
 }
 
+func (c *CockroachdbStore) GetTaskDefinitions(ids []*uuid.UUID) ([]pkg.TaskDefinition, error) {
+	definitions := []models.TaskDefinition{}
+	err := crdbgorm.ExecuteTx(context.Background(), c.db, nil, func(tx *gorm.DB) error {
+		// query for task definitions that aren't completed, whose next fire time is less than the limit
+		return tx.Find(definitions, ids).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return models.ToTaskDefinitions(definitions)
+}
+
+func (c *CockroachdbStore) DeleteTaskDefinitions(ids []*uuid.UUID) error {
+	return crdbgorm.ExecuteTx(context.Background(), c.db, nil, func(tx *gorm.DB) error {
+		// query for task definitions that aren't completed, whose next fire time is less than the limit
+		return tx.Delete([]models.TaskDefinition{}, ids).Error
+	})
+}
+
 func (c *CockroachdbStore) GetTaskDefinitionsToSchedule(limit time.Time) ([]pkg.TaskDefinition, error) {
 	limit = limit.UTC()
 	taskDefinitionModels := []models.TaskDefinition{}
