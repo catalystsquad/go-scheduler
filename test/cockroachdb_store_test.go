@@ -92,3 +92,10 @@ func (s *CockroachdbStoreSuite) TestListWithMetadataQuery() {
 	metadataQuery := fmt.Sprintf(`metadata @> '{"user_id": "%s"}'`, id)
 	TestListWithMetadataQuery(s.T(), cockroachdbStore, metadata, metadataQuery)
 }
+
+func (s *CockroachdbStoreSuite) TestDeleteWithMetadataQuery() {
+	id := uuid.New().String()
+	metadata := map[string]interface{}{"user_id": id}
+	metadataQuery := fmt.Sprintf(`metadata @> '{"user_id": "%s"}'`, id)
+	TestDeleteWithMetadataQuery(s.T(), cockroachdbStore, metadata, metadataQuery)
+}

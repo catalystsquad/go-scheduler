@@ -635,6 +635,29 @@ func TestListWithMetadataQuery(t *testing.T, store pkg.StoreInterface, metadata 
 	require.Equal(t, definitions[0].Metadata, metadata)
 }
 
+func TestDeleteWithMetadataQuery(t *testing.T, store pkg.StoreInterface, metadata interface{}, metadataQuery interface{}) {
+	for i := 0; i < 5; i++ {
+		definition := generateRandomTaskWithExecuteOnceTrigger(time.Time{}, 1*time.Minute)
+		err := store.UpsertTaskDefinition(definition)
+		require.NoError(t, err)
+	}
+	metaDefinition := generateRandomTaskWithExecuteOnceTrigger(time.Time{}, 1*time.Minute)
+	metaDefinition.Metadata = metadata
+	err := store.UpsertTaskDefinition(metaDefinition)
+	require.NoError(t, err)
+	definitions, err := store.ListTaskDefinitions(0, 100, metadataQuery)
+	require.Len(t, definitions, 1)
+	require.Equal(t, definitions[0].Metadata, metadata)
+	err = store.DeleteTaskDefinitionsByMetadata(metadataQuery)
+	require.NoError(t, err)
+	definitions, err = store.ListTaskDefinitions(0, 100, metadataQuery)
+	require.NoError(t, err)
+	require.Len(t, definitions, 0)
+	definitions, err = store.ListTaskDefinitions(0, 100, nil)
+	require.NoError(t, err)
+	require.Len(t, definitions, 5)
+}
+
 func TestCronTriggerRetry(t *testing.T, store pkg.StoreInterface) {
 	executionCount := 0
 	succeedAfter := 3

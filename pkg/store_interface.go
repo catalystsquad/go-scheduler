@@ -13,6 +13,7 @@ type StoreInterface interface {
 	GetTaskDefinitions(ids []*uuid.UUID) ([]TaskDefinition, error)
 	DeleteTaskDefinition(id *uuid.UUID) error
 	DeleteTaskDefinitions(ids []*uuid.UUID) error
+	DeleteTaskDefinitionsByMetadata(metadataQuery interface{}) error
 	UpsertTaskInstance(taskInstance TaskInstance) error
 	GetTaskInstance(id *uuid.UUID) (TaskInstance, error)
 	ListTaskInstances(offset, limit int) ([]TaskInstance, error)
