@@ -73,6 +73,10 @@ func (s *Scheduler) DeleteTaskDefinitions(ids []*uuid.UUID) error {
 	return s.store.DeleteTaskDefinitions(ids)
 }
 
+func (s *Scheduler) DeleteTaskDefinitionsByMetadataQuery(metadataQuery interface{}) error {
+	return s.store.DeleteTaskDefinitionsByMetadata(metadataQuery)
+}
+
 func (s *Scheduler) Run() {
 	s.run = true
 	// start task instance scheduler, task instance runner, and task instance cleanup, in background
