@@ -11,7 +11,8 @@ create table task_definitions
     last_fire_time timestamptz,
     next_fire_time timestamptz,
     completed_at timestamptz,
-    recurring bool
+    recurring bool,
+    INVERTED INDEX metadata_idx (metadata)
 );
 
 create table task_instances

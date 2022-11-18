@@ -148,10 +148,14 @@ func (c *CockroachdbStore) ListTaskInstances(offset, limit int) ([]pkg.TaskInsta
 	return models.ToTaskInstances(taskInstanceModels)
 }
 
-func (c *CockroachdbStore) ListTaskDefinitions(offset, limit int) ([]pkg.TaskDefinition, error) {
+func (c *CockroachdbStore) ListTaskDefinitions(offset, limit int, metadataQuery interface{}) ([]pkg.TaskDefinition, error) {
 	taskDefinitionModels := []models.TaskDefinition{}
 	err := crdbgorm.ExecuteTx(context.Background(), c.db, nil, func(tx *gorm.DB) error {
-		return tx.Preload(clause.Associations).Order("created_at").Offset(offset).Limit(limit).Find(&taskDefinitionModels).Error
+		tx = tx.Preload(clause.Associations).Order("created_at").Offset(offset).Limit(limit)
+		if metadataQuery != nil {
+			tx = tx.Where(metadataQuery)
+		}
+		return tx.Find(&taskDefinitionModels).Error
 	})
 	if err != nil {
 		logging.Log.WithError(err).Error("error scheduling task with cockroachdb store")

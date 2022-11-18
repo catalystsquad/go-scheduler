@@ -8,7 +8,7 @@ import (
 type StoreInterface interface {
 	Initialize() error
 	UpsertTaskDefinition(definition TaskDefinition) error
-	ListTaskDefinitions(offset, limit int) ([]TaskDefinition, error)
+	ListTaskDefinitions(offset, limit int, metadataQuery interface{}) ([]TaskDefinition, error)
 	GetTaskDefinition(id *uuid.UUID) (TaskDefinition, error)
 	GetTaskDefinitions(ids []*uuid.UUID) ([]TaskDefinition, error)
 	DeleteTaskDefinition(id *uuid.UUID) error
