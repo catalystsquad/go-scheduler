@@ -27,10 +27,10 @@ type CockroachdbStore struct {
 	config *gorm.Config
 }
 
-func (c *CockroachdbStore) DeleteTaskDefinitionsByMetadata(query interface{}, args ...interface{}) error {
+func (c *CockroachdbStore) DeleteTaskDefinitionsByMetadata(metadataQuery interface{}) error {
 	err := crdbgorm.ExecuteTx(context.Background(), c.db, nil, func(tx *gorm.DB) error {
 		// query for task definitions that aren't completed, whose next fire time is less than the limit
-		return tx.Where(query, args).Delete(&models.TaskDefinition{}).Error
+		return tx.Where(metadataQuery).Delete(&models.TaskDefinition{}).Error
 	})
 	if err != nil {
 		logging.Log.WithError(err).Error("error deleting task definitions by metadata query")
