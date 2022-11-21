@@ -73,8 +73,8 @@ func (s *Scheduler) DeleteTaskDefinitions(ids []*uuid.UUID) error {
 	return s.store.DeleteTaskDefinitions(ids)
 }
 
-func (s *Scheduler) DeleteTaskDefinitionsByMetadataQuery(metadataQuery interface{}) error {
-	return s.store.DeleteTaskDefinitionsByMetadata(metadataQuery)
+func (s *Scheduler) DeleteTaskDefinitionsByMetadataQuery(query interface{}, args ...interface{}) error {
+	return s.store.DeleteTaskDefinitionsByMetadata(query, args)
 }
 
 func (s *Scheduler) Run() {
