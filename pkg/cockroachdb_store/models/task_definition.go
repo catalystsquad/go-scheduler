@@ -5,6 +5,7 @@ import (
 	"github.com/catalystsquad/go-scheduler/pkg"
 	"github.com/dariubs/gorm-jsonb"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 	"time"
 )
 
@@ -23,6 +24,14 @@ type TaskDefinition struct {
 	CompletedAt         *time.Time          `json:"completed_at"`
 	TaskInstances       []TaskInstance      `json:"task_instances"`
 	Recurring           bool
+}
+
+func (t *TaskDefinition) BeforeCreate(tx *gorm.DB) error {
+	if t.Id == nil || t.Id == &uuid.Nil {
+		id := uuid.New()
+		t.Id = &id
+	}
+	return nil
 }
 
 func (t TaskDefinition) ToTaskDefinition() (pkg.TaskDefinition, error) {

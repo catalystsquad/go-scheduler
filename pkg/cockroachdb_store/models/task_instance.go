@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/catalystsquad/go-scheduler/pkg"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 	"time"
 )
 
@@ -17,6 +18,14 @@ type TaskInstance struct {
 	CompletedAt      *time.Time      `json:"completed_at"`
 	TaskDefinitionId *uuid.UUID      `json:"task_definition_id"`
 	TaskDefinition   *TaskDefinition `json:"task_definition"`
+}
+
+func (t *TaskInstance) BeforeCreate(tx *gorm.DB) error {
+	if t.Id == nil || t.Id == &uuid.Nil {
+		id := uuid.New()
+		t.Id = &id
+	}
+	return nil
 }
 
 func (t TaskInstance) ToTaskInstance() (pkg.TaskInstance, error) {
