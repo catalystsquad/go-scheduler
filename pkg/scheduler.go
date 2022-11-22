@@ -23,7 +23,7 @@ type Scheduler struct {
 	shutdown       chan bool
 }
 
-func NewScheduler(scheduleWindow, runnerWindow, cleanupWindow time.Duration, handler func(task TaskInstance) error, store StoreInterface) (*Scheduler, error) {
+func NewScheduler(scheduleWindow, runnerWindow, cleanupWindow time.Duration, handler func(taskInstance TaskInstance) error, store StoreInterface) (*Scheduler, error) {
 	scheduler := &Scheduler{
 		ScheduleWindow: &scheduleWindow,
 		RunnerWindow:   &runnerWindow,
@@ -119,9 +119,9 @@ func (s *Scheduler) createTaskInstance(taskDefinition TaskDefinition) error {
 	executeAt := taskDefinition.GetNextFireTime()
 	expiresAt := executeAt.Add(taskDefinition.ExpireAfter)
 	taskInstance := TaskInstance{
-		ExpiresAt:        &expiresAt,
-		ExecuteAt:        executeAt,
-		TaskDefinitionId: taskDefinition.Id,
+		ExpiresAt:      &expiresAt,
+		ExecuteAt:      executeAt,
+		TaskDefinition: taskDefinition,
 	}
 	err := s.store.UpsertTaskInstance(taskInstance)
 	if err != nil {
@@ -171,12 +171,7 @@ func (s *Scheduler) handleTaskInstance(taskInstance TaskInstance) {
 	// sleep until the execution time
 	time.Sleep(time.Until(*taskInstance.ExecuteAt))
 	// mark task in progress
-	taskDefinition, err := s.store.GetTaskDefinition(taskInstance.TaskDefinitionId)
-	if err != nil {
-		logging.Log.WithFields(logrus.Fields{"task_instance_id": taskInstance.Id, "task_definition_id": taskInstance.TaskDefinitionId}).WithError(err).Error("error getting task definition for task instance")
-		return
-	}
-	err = s.markTaskInstanceInProgress(taskInstance, taskDefinition)
+	err := s.markTaskInstanceInProgress(taskInstance)
 	if err != nil {
 		return
 	}
@@ -186,19 +181,19 @@ func (s *Scheduler) handleTaskInstance(taskInstance TaskInstance) {
 		// no error, mark instance completed
 		err = s.store.MarkTaskInstanceComplete(taskInstance)
 		if err != nil {
-			logging.Log.WithError(err).WithFields(logrus.Fields{"task_instance_id": taskInstance.Id, "task_definition_id": taskInstance.TaskDefinitionId}).Error("error setting task instance completed_at")
+			logging.Log.WithError(err).WithFields(logrus.Fields{"task_instance_id": taskInstance.Id, "task_definition_id": taskInstance.TaskDefinition.Id}).Error("error setting task instance completed_at")
 		}
 	}
 }
 
-func (s *Scheduler) markTaskInstanceInProgress(taskInstance TaskInstance, definition TaskDefinition) error {
+func (s *Scheduler) markTaskInstanceInProgress(taskInstance TaskInstance) error {
 	startedAt := time.Now().UTC()
-	expiresAt := startedAt.Add(definition.ExpireAfter)
+	expiresAt := startedAt.Add(taskInstance.TaskDefinition.ExpireAfter)
 	taskInstance.StartedAt = &startedAt
 	taskInstance.ExpiresAt = &expiresAt
 	err := s.store.UpsertTaskInstance(taskInstance)
 	if err != nil {
-		logging.Log.WithError(err).WithFields(logrus.Fields{"task_instance_id": taskInstance.Id, "task_definition_id": taskInstance.TaskDefinitionId}).Error("error setting task instance started_at")
+		logging.Log.WithError(err).WithFields(logrus.Fields{"task_instance_id": taskInstance.Id, "task_definition_id": taskInstance.TaskDefinition.Id}).Error("error setting task instance started_at")
 	}
 	return err
 }

@@ -116,8 +116,8 @@ func TestTaskInstanceCrud(t *testing.T, store pkg.StoreInterface) {
 	require.Len(t, listedTaskInstances, 2)
 	listedExecuteOnceTaskInstance := listedTaskInstances[0]
 	listedCronTaskInstance := listedTaskInstances[1]
-	require.Equal(t, fetchedExecuteOnceTask.Id, listedExecuteOnceTaskInstance.TaskDefinitionId)
-	require.Equal(t, fetchedCronTask.Id, listedCronTaskInstance.TaskDefinitionId)
+	require.Equal(t, fetchedExecuteOnceTask.Id, listedExecuteOnceTaskInstance.TaskDefinition.Id)
+	require.Equal(t, fetchedCronTask.Id, listedCronTaskInstance.TaskDefinition.Id)
 	// update task instances
 	completedAt := time.Now().UTC()
 	listedExecuteOnceTaskInstance.CompletedAt = &completedAt
@@ -428,7 +428,7 @@ func TestExecuteOnceTriggerTasksRunInOrder(t *testing.T, store pkg.StoreInterfac
 	// be executed first even though it was scheduled last
 	executedTaskDefinitions := []pkg.TaskDefinition{}
 	handler := func(task pkg.TaskInstance) error {
-		executedTaskDefinitions = append(executedTaskDefinitions, pkg.TaskDefinition{Id: task.TaskDefinitionId})
+		executedTaskDefinitions = append(executedTaskDefinitions, pkg.TaskDefinition{Id: task.TaskDefinition.Id})
 		return nil
 	}
 	// tick once per second
@@ -783,9 +783,9 @@ func createTaskInstanceFromTaskDefinition(taskDefinition pkg.TaskDefinition) pkg
 	executeAt := taskDefinition.GetNextFireTime()
 	expiresAt := executeAt.Add(taskDefinition.ExpireAfter).UTC()
 	return pkg.TaskInstance{
-		ExpiresAt:        &expiresAt,
-		ExecuteAt:        executeAt,
-		TaskDefinitionId: taskDefinition.Id,
+		ExpiresAt:      &expiresAt,
+		ExecuteAt:      executeAt,
+		TaskDefinition: taskDefinition,
 	}
 }
 
@@ -793,9 +793,9 @@ func generateRandomTaskInstance(taskDefinition pkg.TaskDefinition) pkg.TaskInsta
 	executeAt := taskDefinition.GetNextFireTime()
 	expiresAt := executeAt.Add(taskDefinition.ExpireAfter)
 	return pkg.TaskInstance{
-		ExpiresAt:        &expiresAt,
-		ExecuteAt:        executeAt,
-		TaskDefinitionId: taskDefinition.Id,
+		ExpiresAt:      &expiresAt,
+		ExecuteAt:      executeAt,
+		TaskDefinition: taskDefinition,
 	}
 }
 

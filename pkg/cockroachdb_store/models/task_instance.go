@@ -2,21 +2,24 @@ package models
 
 import (
 	"encoding/json"
+	"github.com/catalystsquad/app-utils-go/logging"
 	"github.com/catalystsquad/go-scheduler/pkg"
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 	"time"
 )
 
 type TaskInstance struct {
-	Id               *uuid.UUID `json:"id" gorm:"primaryKey"`
-	CreatedAt        int64      `json:"created_at,string" gorm:"autoCreateTime:nano"`
-	UpdatedAt        int64      `json:"updated_at,string" gorm:"autoUpdateTime:nano"`
-	ExpiresAt        *time.Time `json:"expires_at"`
-	ExecuteAt        *time.Time `json:"execute_at"`
-	StartedAt        *time.Time `json:"started_at"`
-	CompletedAt      *time.Time `json:"completed_at"`
-	TaskDefinitionId *uuid.UUID `json:"task_definition_id"`
+	Id               *uuid.UUID      `json:"id" gorm:"primaryKey"`
+	CreatedAt        int64           `json:"created_at,string" gorm:"autoCreateTime:nano"`
+	UpdatedAt        int64           `json:"updated_at,string" gorm:"autoUpdateTime:nano"`
+	ExpiresAt        *time.Time      `json:"expires_at"`
+	ExecuteAt        *time.Time      `json:"execute_at"`
+	StartedAt        *time.Time      `json:"started_at"`
+	CompletedAt      *time.Time      `json:"completed_at"`
+	TaskDefinitionId *uuid.UUID      `json:"task_definition_id"`
+	TaskDefinition   *TaskDefinition `json:"task_definition"`
 }
 
 func (t *TaskInstance) BeforeCreate(tx *gorm.DB) error {
@@ -24,6 +27,7 @@ func (t *TaskInstance) BeforeCreate(tx *gorm.DB) error {
 	if t.Id == nil || t.Id.String() == nilUuidString {
 		id := uuid.New()
 		t.Id = &id
+		logging.Log.WithFields(logrus.Fields{"task_definition_id": t.TaskDefinition.Id}).Info("set new id on task instance during create")
 	}
 	return nil
 }
@@ -65,5 +69,6 @@ func GetTaskInstanceModelFromTaskInstance(taskInstance pkg.TaskInstance) (*TaskI
 	if err != nil {
 		return nil, err
 	}
+	taskInstanceModel.TaskDefinitionId = taskInstanceModel.TaskDefinition.Id
 	return taskInstanceModel, err
 }

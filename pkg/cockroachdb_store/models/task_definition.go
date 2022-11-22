@@ -2,6 +2,7 @@ package models
 
 import (
 	"encoding/json"
+	"github.com/catalystsquad/app-utils-go/logging"
 	"github.com/catalystsquad/go-scheduler/pkg"
 	"github.com/dariubs/gorm-jsonb"
 	"github.com/google/uuid"
@@ -33,6 +34,7 @@ func (t *TaskDefinition) BeforeCreate(tx *gorm.DB) error {
 	if t.Id == nil || t.Id.String() == nilUuidString {
 		id := uuid.New()
 		t.Id = &id
+		logging.Log.Info("set new id on task definition during create")
 	}
 	return nil
 }

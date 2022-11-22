@@ -82,12 +82,12 @@ func (c *CockroachdbStore) MarkTaskInstanceComplete(taskInstance pkg.TaskInstanc
 	completedAt := time.Now().UTC()
 	return crdbgorm.ExecuteTx(context.Background(), c.db, nil, func(tx *gorm.DB) error {
 		// if the parent task definition is not recurring, this marks it as completed in a single query
-		err := tx.Model(&models.TaskDefinition{}).Where("id = ? and recurring = false", taskInstance.TaskDefinitionId).Update("completed_at", completedAt).Error
+		err := tx.Model(&models.TaskDefinition{}).Where("id = ? and recurring = false", taskInstance.TaskDefinition.Id).Update("completed_at", completedAt).Error
 		if err != nil {
 			logging.Log.WithError(err).Error("error marking task definition complete")
 			return err
 		}
-		err = tx.Model(&models.TaskInstance{}).Where("id = ?", taskInstance.Id).Update("completed_at", completedAt).Error
+		err = tx.Omit("TaskDefinition").Model(&models.TaskInstance{}).Where("id = ?", taskInstance.Id).Update("completed_at", completedAt).Error
 		if err != nil {
 			logging.Log.WithError(err).Error("error marking task instance complete")
 		}
@@ -219,12 +219,13 @@ func (c *CockroachdbStore) GetTaskInstancesToRun(limit time.Time) ([]pkg.TaskIns
 }
 
 func (c *CockroachdbStore) UpsertTaskInstance(taskInstance pkg.TaskInstance) error {
+	logging.Log.Info("upserting task instance")
 	taskInstanceModel, err := models.GetTaskInstanceModelFromTaskInstance(taskInstance)
 	if err != nil {
 		return err
 	}
 	err = crdbgorm.ExecuteTx(context.Background(), c.db, nil, func(tx *gorm.DB) error {
-		return tx.Omit(clause.Associations).Clauses(clause.OnConflict{
+		return tx.Omit("TaskDefinition").Clauses(clause.OnConflict{
 			UpdateAll: true,
 		}).Create(&taskInstanceModel).Error
 	})
@@ -280,7 +281,9 @@ func (c *CockroachdbStore) Initialize() (err error) {
 }
 
 func (c *CockroachdbStore) UpsertTaskDefinition(taskDefinition pkg.TaskDefinition) error {
+	logging.Log.Info("upserting task definition")
 	taskDefinitionModel, err := models.GetTaskDefinitionModelFromTaskDefinition(taskDefinition)
+	taskDefinitionModel.TaskInstances = nil
 	if err != nil {
 		return err
 	}
