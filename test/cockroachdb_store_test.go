@@ -99,3 +99,10 @@ func (s *CockroachdbStoreSuite) TestDeleteWithMetadataQuery() {
 	metadataQuery := fmt.Sprintf(`metadata @> '{"user_id": "%s"}'`, id)
 	TestDeleteWithMetadataQuery(s.T(), cockroachdbStore, metadata, metadataQuery)
 }
+
+func (s *CockroachdbStoreSuite) TestSingleTaskDefinitionCreatedForCronTasks() {
+	TestCronTriggerHappyPath(s.T(), cockroachdbStore)
+	definitions, err := cockroachdbStore.ListTaskDefinitions(0, 1000, nil)
+	require.NoError(s.T(), err)
+	require.Len(s.T(), definitions, 1)
+}

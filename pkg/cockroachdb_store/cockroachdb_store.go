@@ -81,7 +81,8 @@ func (c *CockroachdbStore) GetTaskDefinitionsToSchedule(limit time.Time) ([]pkg.
 func (c *CockroachdbStore) MarkTaskInstanceComplete(taskInstance pkg.TaskInstance) error {
 	completedAt := time.Now().UTC()
 	return crdbgorm.ExecuteTx(context.Background(), c.db, nil, func(tx *gorm.DB) error {
-		err := tx.Model(&models.TaskDefinition{}).Where("id = ? and recurring = false", taskInstance.TaskDefinition.Id).Update("completed_at", completedAt).Error
+		// if the parent task definition is not recurring, this marks it as completed in a single query
+		err := tx.Model(&models.TaskDefinition{}).Where("id = ? and recurring = false", taskInstance.TaskDefinitionId).Update("completed_at", completedAt).Error
 		if err != nil {
 			logging.Log.WithError(err).Error("error marking task definition complete")
 			return err
@@ -222,9 +223,8 @@ func (c *CockroachdbStore) UpsertTaskInstance(taskInstance pkg.TaskInstance) err
 	if err != nil {
 		return err
 	}
-	taskInstanceModel.TaskDefinition = nil
 	err = crdbgorm.ExecuteTx(context.Background(), c.db, nil, func(tx *gorm.DB) error {
-		return tx.Clauses(clause.OnConflict{
+		return tx.Omit(clause.Associations).Clauses(clause.OnConflict{
 			UpdateAll: true,
 		}).Create(&taskInstanceModel).Error
 	})
@@ -285,7 +285,7 @@ func (c *CockroachdbStore) UpsertTaskDefinition(taskDefinition pkg.TaskDefinitio
 		return err
 	}
 	err = crdbgorm.ExecuteTx(context.Background(), c.db, nil, func(tx *gorm.DB) error {
-		return tx.Clauses(clause.OnConflict{
+		return tx.Omit("TaskInstances").Clauses(clause.OnConflict{
 			UpdateAll: true,
 		}).Create(&taskDefinitionModel).Error
 	})
