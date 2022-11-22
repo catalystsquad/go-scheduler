@@ -7,15 +7,16 @@ import (
 
 type StoreInterface interface {
 	Initialize() error
-	CreateTaskDefinition(taskDefinition TaskDefinition) error
-	ListTaskDefinitions(offset, limit int) ([]TaskDefinition, error)
+	UpsertTaskDefinition(definition TaskDefinition) error
+	ListTaskDefinitions(offset, limit int, metadataQuery interface{}) ([]TaskDefinition, error)
 	GetTaskDefinition(id *uuid.UUID) (TaskDefinition, error)
-	UpdateTaskDefinition(taskDefinition TaskDefinition) error
+	GetTaskDefinitions(ids []*uuid.UUID) ([]TaskDefinition, error)
 	DeleteTaskDefinition(id *uuid.UUID) error
-	CreateTaskInstance(taskInstance TaskInstance) error
+	DeleteTaskDefinitions(ids []*uuid.UUID) error
+	DeleteTaskDefinitionsByMetadata(metadataQuery interface{}) error
+	UpsertTaskInstance(taskInstance TaskInstance) error
 	GetTaskInstance(id *uuid.UUID) (TaskInstance, error)
 	ListTaskInstances(offset, limit int) ([]TaskInstance, error)
-	UpdateTaskInstance(taskInstance TaskInstance) error
 	DeleteTaskInstance(id *uuid.UUID) error
 	GetTaskDefinitionsToSchedule(limit time.Time) ([]TaskDefinition, error)
 	GetTaskInstancesToRun(limit time.Time) ([]TaskInstance, error)

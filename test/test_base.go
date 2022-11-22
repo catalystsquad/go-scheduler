@@ -26,11 +26,11 @@ func TestTaskDefinitionCrud(t *testing.T, store pkg.StoreInterface) {
 	expectedExecuteOnceTask := generateRandomTaskWithExecuteOnceTrigger(time.Now().Add(5*time.Second), 0)
 	expectedCronTask, err := generateRandomTaskWithCronTrigger("@hourly", 0)
 	require.NoError(t, err)
-	err = store.CreateTaskDefinition(expectedExecuteOnceTask)
+	err = store.UpsertTaskDefinition(expectedExecuteOnceTask)
 	require.NoError(t, err)
-	err = store.CreateTaskDefinition(expectedCronTask)
+	err = store.UpsertTaskDefinition(expectedCronTask)
 	require.NoError(t, err)
-	tasks, err := store.ListTaskDefinitions(0, 1000)
+	tasks, err := store.ListTaskDefinitions(0, 1000, nil)
 	require.NoError(t, err)
 	require.Len(t, tasks, 2)
 	assertTaskEquality(t, expectedExecuteOnceTask, tasks[0])
@@ -44,7 +44,7 @@ func TestTaskDefinitionCrud(t *testing.T, store pkg.StoreInterface) {
 	updatedExecuteOnceTask.ExpireAfter = expectedExpireAfter
 	updatedExecuteOnceTask.Metadata = expectedMetaData
 	updatedExecuteOnceTask.ExecuteOnceTrigger = pkg.NewExecuteOnceTrigger(time.Now().Add(20 * time.Second))
-	err = store.UpdateTaskDefinition(updatedExecuteOnceTask)
+	err = store.UpsertTaskDefinition(updatedExecuteOnceTask)
 	require.NoError(t, err)
 	// verify update
 	fetchedExecuteOnceTask, err := store.GetTaskDefinition(updatedExecuteOnceTask.Id)
@@ -57,22 +57,22 @@ func TestTaskDefinitionCrud(t *testing.T, store pkg.StoreInterface) {
 	require.NoError(t, err)
 	updatedCronTask.ExpireAfter = expectedExpireAfter
 	updatedCronTask.Metadata = expectedMetaData
-	err = store.UpdateTaskDefinition(updatedCronTask)
+	err = store.UpsertTaskDefinition(updatedCronTask)
 	require.NoError(t, err)
 	// verify update
 	fetchedCronTask, err := store.GetTaskDefinition(updatedCronTask.Id)
 	require.NoError(t, err)
 	assertTaskEquality(t, updatedCronTask, fetchedCronTask)
 	// test list offset/limit
-	tasks, err = store.ListTaskDefinitions(0, 1)
+	tasks, err = store.ListTaskDefinitions(0, 1, nil)
 	require.NoError(t, err)
 	require.Len(t, tasks, 1)
 	require.Equal(t, updatedExecuteOnceTask.Id, tasks[0].Id)
-	tasks, err = store.ListTaskDefinitions(1, 1)
+	tasks, err = store.ListTaskDefinitions(1, 1, nil)
 	require.NoError(t, err)
 	require.Len(t, tasks, 1)
 	require.Equal(t, updatedCronTask.Id, tasks[0].Id)
-	tasks, err = store.ListTaskDefinitions(2, 10)
+	tasks, err = store.ListTaskDefinitions(2, 10, nil)
 	require.NoError(t, err)
 	require.Len(t, tasks, 0)
 	// delete task definitions
@@ -94,21 +94,21 @@ func TestTaskInstanceCrud(t *testing.T, store pkg.StoreInterface) {
 	expectedCronTask, err := generateRandomTaskWithCronTrigger("@hourly", 0)
 	expectedCronTask.ExpireAfter = expireAfter
 	require.NoError(t, err)
-	err = store.CreateTaskDefinition(expectedExecuteOnceTask)
+	err = store.UpsertTaskDefinition(expectedExecuteOnceTask)
 	require.NoError(t, err)
-	err = store.CreateTaskDefinition(expectedCronTask)
+	err = store.UpsertTaskDefinition(expectedCronTask)
 	require.NoError(t, err)
-	tasks, err := store.ListTaskDefinitions(0, 1000)
+	tasks, err := store.ListTaskDefinitions(0, 1000, nil)
 	require.NoError(t, err)
 	require.Len(t, tasks, 2)
 	fetchedExecuteOnceTask := tasks[0]
 	fetchedCronTask := tasks[1]
 	// create a task instance for each task
 	executeOnceTaskInstance := createTaskInstanceFromTaskDefinition(fetchedExecuteOnceTask)
-	err = store.CreateTaskInstance(executeOnceTaskInstance)
+	err = store.UpsertTaskInstance(executeOnceTaskInstance)
 	require.NoError(t, err)
 	cronTaskInstance := createTaskInstanceFromTaskDefinition(fetchedCronTask)
-	err = store.CreateTaskInstance(cronTaskInstance)
+	err = store.UpsertTaskInstance(cronTaskInstance)
 	require.NoError(t, err)
 	// list task instances
 	listedTaskInstances, err := store.ListTaskInstances(0, 1000)
@@ -122,9 +122,9 @@ func TestTaskInstanceCrud(t *testing.T, store pkg.StoreInterface) {
 	completedAt := time.Now().UTC()
 	listedExecuteOnceTaskInstance.CompletedAt = &completedAt
 	listedCronTaskInstance.CompletedAt = &completedAt
-	err = store.UpdateTaskInstance(listedExecuteOnceTaskInstance)
+	err = store.UpsertTaskInstance(listedExecuteOnceTaskInstance)
 	require.NoError(t, err)
-	err = store.UpdateTaskInstance(listedCronTaskInstance)
+	err = store.UpsertTaskInstance(listedCronTaskInstance)
 	require.NoError(t, err)
 	// fetch by id and verify the update
 	fetchedExecuteOnceTaskInstance, err := store.GetTaskInstance(listedExecuteOnceTaskInstance.Id)
@@ -160,15 +160,15 @@ func TestGetTaskInstancesToRunNotInProgressNotExpired(t *testing.T, store pkg.St
 	taskDefinition := generateRandomTaskWithExecuteOnceTrigger(executeAt, 0)
 	expireAfter := 1 * time.Minute
 	taskDefinition.ExpireAfter = expireAfter
-	err := store.CreateTaskDefinition(taskDefinition)
+	err := store.UpsertTaskDefinition(taskDefinition)
 	require.NoError(t, err)
-	listedTaskDefinitions, err := store.ListTaskDefinitions(0, 1000)
+	listedTaskDefinitions, err := store.ListTaskDefinitions(0, 1000, nil)
 	require.NoError(t, err)
 	require.Len(t, listedTaskDefinitions, 1)
 	listedTaskDefinition := listedTaskDefinitions[0]
 	// create task instance
 	taskInstance := createTaskInstanceFromTaskDefinition(listedTaskDefinition)
-	err = store.CreateTaskInstance(taskInstance)
+	err = store.UpsertTaskInstance(taskInstance)
 	require.NoError(t, err)
 	// list task instances so we have a reference
 	listedTaskInstances, err := store.ListTaskInstances(0, 1000)
@@ -193,16 +193,16 @@ func TestGetTaskInstancesToRunInProgressNotExpired(t *testing.T, store pkg.Store
 	taskDefinition := generateRandomTaskWithExecuteOnceTrigger(executeAt, 0)
 	expireAfter := 1 * time.Minute
 	taskDefinition.ExpireAfter = expireAfter
-	err := store.CreateTaskDefinition(taskDefinition)
+	err := store.UpsertTaskDefinition(taskDefinition)
 	require.NoError(t, err)
-	listedTaskDefinitions, err := store.ListTaskDefinitions(0, 1000)
+	listedTaskDefinitions, err := store.ListTaskDefinitions(0, 1000, nil)
 	require.NoError(t, err)
 	require.Len(t, listedTaskDefinitions, 1)
 	listedTaskDefinition := listedTaskDefinitions[0]
 	// create task instance that is in progress
 	taskInstance := createTaskInstanceFromTaskDefinition(listedTaskDefinition)
 	taskInstance.StartedAt = taskInstance.ExecuteAt
-	err = store.CreateTaskInstance(taskInstance)
+	err = store.UpsertTaskInstance(taskInstance)
 	require.NoError(t, err)
 	// list task instances so we have a reference
 	listedTaskInstances, err := store.ListTaskInstances(0, 1000)
@@ -224,16 +224,16 @@ func TestGetTaskInstancesToRunInProgressAndExpired(t *testing.T, store pkg.Store
 	taskDefinition := generateRandomTaskWithExecuteOnceTrigger(executeAt, 0)
 	expireAfter := 5 * time.Second
 	taskDefinition.ExpireAfter = expireAfter
-	err := store.CreateTaskDefinition(taskDefinition)
+	err := store.UpsertTaskDefinition(taskDefinition)
 	require.NoError(t, err)
-	listedTaskDefinitions, err := store.ListTaskDefinitions(0, 1000)
+	listedTaskDefinitions, err := store.ListTaskDefinitions(0, 1000, nil)
 	require.NoError(t, err)
 	require.Len(t, listedTaskDefinitions, 1)
 	listedTaskDefinition := listedTaskDefinitions[0]
 	// create task instance that is in progress
 	taskInstance := createTaskInstanceFromTaskDefinition(listedTaskDefinition)
 	taskInstance.StartedAt = taskInstance.ExecuteAt
-	err = store.CreateTaskInstance(taskInstance)
+	err = store.UpsertTaskInstance(taskInstance)
 	require.NoError(t, err)
 	// list task instances so we have a reference
 	listedTaskInstances, err := store.ListTaskInstances(0, 1000)
@@ -257,15 +257,15 @@ func TestGetTaskInstancesToRun(t *testing.T, store pkg.StoreInterface) {
 	executeAt := time.Now().Add(5 * time.Minute)
 	expireAfter := 2 * time.Second
 	expectedExecuteOnceTask := generateRandomTaskWithExecuteOnceTrigger(executeAt, expireAfter)
-	err := store.CreateTaskDefinition(expectedExecuteOnceTask)
+	err := store.UpsertTaskDefinition(expectedExecuteOnceTask)
 	require.NoError(t, err)
-	listedTaskDefinitions, err := store.ListTaskDefinitions(0, 1000)
+	listedTaskDefinitions, err := store.ListTaskDefinitions(0, 1000, nil)
 	require.NoError(t, err)
 	require.Len(t, listedTaskDefinitions, 1)
 	listedTaskDefinition := listedTaskDefinitions[0]
 	// create task instance
 	executeOnceTaskInstance := createTaskInstanceFromTaskDefinition(listedTaskDefinition)
-	err = store.CreateTaskInstance(executeOnceTaskInstance)
+	err = store.UpsertTaskInstance(executeOnceTaskInstance)
 	require.NoError(t, err)
 	// list task instances so we have a reference
 	listedTaskInstances, err := store.ListTaskInstances(0, 1000)
@@ -287,13 +287,13 @@ func TestGetTaskInstancesToRun(t *testing.T, store pkg.StoreInterface) {
 func TestMarkCompleted(t *testing.T, store pkg.StoreInterface) {
 	// non-recurring triggers should also mark the task definition complete when the instance is marked complete
 	expectedExecuteOnceTaskDefinition := generateRandomTaskWithExecuteOnceTrigger(time.Time{}, 0)
-	err := store.CreateTaskDefinition(expectedExecuteOnceTaskDefinition)
+	err := store.UpsertTaskDefinition(expectedExecuteOnceTaskDefinition)
 	require.NoError(t, err)
 	expectedExecuteOnceTaskInstance := generateRandomTaskInstance(expectedExecuteOnceTaskDefinition)
-	err = store.CreateTaskInstance(expectedExecuteOnceTaskInstance)
+	err = store.UpsertTaskInstance(expectedExecuteOnceTaskInstance)
 	require.NoError(t, err)
 	// ensure neither are marked complete, just in case
-	listedTaskDefinitions, err := store.ListTaskDefinitions(0, 100)
+	listedTaskDefinitions, err := store.ListTaskDefinitions(0, 100, nil)
 	require.NoError(t, err)
 	require.Len(t, listedTaskDefinitions, 1)
 	listedExecuteOnceTaskDefinition := listedTaskDefinitions[0]
@@ -324,13 +324,13 @@ func TestMarkCompleted(t *testing.T, store pkg.StoreInterface) {
 	// recurring triggers should not mark the task definition complete when the instance is marked complete
 	expectedCronTaskDefinition, err := generateRandomTaskWithCronTrigger("", 0)
 	require.NoError(t, err)
-	err = store.CreateTaskDefinition(expectedCronTaskDefinition)
+	err = store.UpsertTaskDefinition(expectedCronTaskDefinition)
 	require.NoError(t, err)
 	expectedCronTaskInstance := generateRandomTaskInstance(expectedCronTaskDefinition)
-	err = store.CreateTaskInstance(expectedCronTaskInstance)
+	err = store.UpsertTaskInstance(expectedCronTaskInstance)
 	require.NoError(t, err)
 	// ensure neither are marked complete, just in case
-	listedTaskDefinitions, err = store.ListTaskDefinitions(0, 100)
+	listedTaskDefinitions, err = store.ListTaskDefinitions(0, 100, nil)
 	require.NoError(t, err)
 	require.Len(t, listedTaskDefinitions, 1)
 	listedCronTaskDefinition := listedTaskDefinitions[0]
@@ -355,18 +355,18 @@ func TestMarkCompleted(t *testing.T, store pkg.StoreInterface) {
 
 func TestCleanup(t *testing.T, store pkg.StoreInterface) {
 	// create two task definitions
-	err := store.CreateTaskDefinition(generateRandomTaskWithExecuteOnceTrigger(time.Time{}, 0))
+	err := store.UpsertTaskDefinition(generateRandomTaskWithExecuteOnceTrigger(time.Time{}, 0))
 	require.NoError(t, err)
-	err = store.CreateTaskDefinition(generateRandomTaskWithExecuteOnceTrigger(time.Time{}, 0))
+	err = store.UpsertTaskDefinition(generateRandomTaskWithExecuteOnceTrigger(time.Time{}, 0))
 	require.NoError(t, err)
-	listedTaskDefinitions, err := store.ListTaskDefinitions(0, 1000)
+	listedTaskDefinitions, err := store.ListTaskDefinitions(0, 1000, nil)
 	require.NoError(t, err)
 	firstTaskDefinition := listedTaskDefinitions[0]
 	secondTaskDefinition := listedTaskDefinitions[1]
 	// create two task instances
-	err = store.CreateTaskInstance(generateRandomTaskInstance(firstTaskDefinition))
+	err = store.UpsertTaskInstance(generateRandomTaskInstance(firstTaskDefinition))
 	require.NoError(t, err)
-	err = store.CreateTaskInstance(generateRandomTaskInstance(secondTaskDefinition))
+	err = store.UpsertTaskInstance(generateRandomTaskInstance(secondTaskDefinition))
 	require.NoError(t, err)
 	// list task instances so we have a reference
 	listedTaskInstances, err := store.ListTaskInstances(0, 1000)
@@ -386,7 +386,7 @@ func TestCleanup(t *testing.T, store pkg.StoreInterface) {
 	err = store.DeleteCompletedTaskInstances()
 	require.NoError(t, err)
 	// make sure there are still 2 task definitions, but the task instance no longe exists
-	listedTaskDefinitions, err = store.ListTaskDefinitions(0, 1000)
+	listedTaskDefinitions, err = store.ListTaskDefinitions(0, 1000, nil)
 	require.NoError(t, err)
 	require.Len(t, listedTaskDefinitions, 2)
 	listedTaskInstances, err = store.ListTaskInstances(0, 1000)
@@ -396,7 +396,7 @@ func TestCleanup(t *testing.T, store pkg.StoreInterface) {
 	// delete completed task definitions
 	err = store.DeleteCompletedTaskDefinitions()
 	// ensure the task definition was deleted
-	listedTaskDefinitions, err = store.ListTaskDefinitions(0, 1000)
+	listedTaskDefinitions, err = store.ListTaskDefinitions(0, 1000, nil)
 	require.NoError(t, err)
 	require.Len(t, listedTaskDefinitions, 1)
 	require.Equal(t, secondTaskDefinition.Id, listedTaskDefinitions[0].Id)
@@ -413,7 +413,7 @@ func TestExecuteOnceTriggerHappyPath(t *testing.T, store pkg.StoreInterface) {
 	require.NoError(t, err)
 	executeAt := time.Now().Add(1 * time.Second)
 	expectedDefinition := generateRandomTaskWithExecuteOnceTrigger(executeAt, 0)
-	err = scheduler.CreateTaskDefinition(expectedDefinition)
+	err = scheduler.UpsertTaskDefinition(expectedDefinition)
 	require.NoError(t, err)
 	go scheduler.Run()
 	defer scheduler.Stop()
@@ -428,7 +428,7 @@ func TestExecuteOnceTriggerTasksRunInOrder(t *testing.T, store pkg.StoreInterfac
 	// be executed first even though it was scheduled last
 	executedTaskDefinitions := []pkg.TaskDefinition{}
 	handler := func(task pkg.TaskInstance) error {
-		executedTaskDefinitions = append(executedTaskDefinitions, task.TaskDefinition)
+		executedTaskDefinitions = append(executedTaskDefinitions, pkg.TaskDefinition{Id: task.TaskDefinition.Id})
 		return nil
 	}
 	// tick once per second
@@ -444,7 +444,7 @@ func TestExecuteOnceTriggerTasksRunInOrder(t *testing.T, store pkg.StoreInterfac
 		Metadata:           task1MetaData,
 		ExecuteOnceTrigger: pkg.NewExecuteOnceTrigger(task1ExecuteAt),
 	}
-	err = scheduler.CreateTaskDefinition(task1)
+	err = scheduler.UpsertTaskDefinition(task1)
 	require.NoError(t, err)
 
 	// task2
@@ -456,7 +456,7 @@ func TestExecuteOnceTriggerTasksRunInOrder(t *testing.T, store pkg.StoreInterfac
 		Metadata:           task2MetaData,
 		ExecuteOnceTrigger: pkg.NewExecuteOnceTrigger(task2ExecuteAt),
 	}
-	err = scheduler.CreateTaskDefinition(task2)
+	err = scheduler.UpsertTaskDefinition(task2)
 	require.NoError(t, err)
 
 	// task3
@@ -468,7 +468,7 @@ func TestExecuteOnceTriggerTasksRunInOrder(t *testing.T, store pkg.StoreInterfac
 		Metadata:           task3MetaData,
 		ExecuteOnceTrigger: pkg.NewExecuteOnceTrigger(task3ExecuteAt),
 	}
-	err = scheduler.CreateTaskDefinition(task3)
+	err = scheduler.UpsertTaskDefinition(task3)
 	require.NoError(t, err)
 
 	go scheduler.Run()
@@ -502,7 +502,7 @@ func TestExecuteOnceTriggerLongRunningTaskExpired(t *testing.T, store pkg.StoreI
 		ExecuteOnceTrigger: pkg.NewExecuteOnceTrigger(executeAt),
 		ExpireAfter:        expireAfter,
 	}
-	err = scheduler.CreateTaskDefinition(task)
+	err = scheduler.UpsertTaskDefinition(task)
 	require.NoError(t, err)
 	go scheduler.Run()
 	defer scheduler.Stop()
@@ -532,7 +532,7 @@ func TestExecuteOnceTriggerLongRunningTaskNotExpired(t *testing.T, store pkg.Sto
 		ExecuteOnceTrigger: pkg.NewExecuteOnceTrigger(executeAt),
 		ExpireAfter:        expireAfter,
 	}
-	err = scheduler.CreateTaskDefinition(task)
+	err = scheduler.UpsertTaskDefinition(task)
 	require.NoError(t, err)
 	go scheduler.Run()
 	defer scheduler.Stop()
@@ -557,7 +557,7 @@ func TestExecuteOnceTriggerRetry(t *testing.T, store pkg.StoreInterface) {
 		Metadata:           metaData,
 		ExecuteOnceTrigger: pkg.NewExecuteOnceTrigger(executeAt),
 	}
-	err = scheduler.CreateTaskDefinition(task)
+	err = scheduler.UpsertTaskDefinition(task)
 	require.NoError(t, err)
 	go scheduler.Run()
 	defer scheduler.Stop()
@@ -585,7 +585,7 @@ func TestExecuteOnceTriggerNoRetry(t *testing.T, store pkg.StoreInterface) {
 		Metadata:           metaData,
 		ExecuteOnceTrigger: pkg.NewExecuteOnceTrigger(executeAt),
 	}
-	err = scheduler.CreateTaskDefinition(task)
+	err = scheduler.UpsertTaskDefinition(task)
 	require.NoError(t, err)
 	go scheduler.Run()
 	defer scheduler.Stop()
@@ -600,23 +600,62 @@ func TestCronTriggerHappyPath(t *testing.T, store pkg.StoreInterface) {
 		return nil
 	}
 	// tick once per second
-	scheduler, err := pkg.NewScheduler(500*time.Millisecond, 1*time.Second, 1*time.Second, handler, store)
+	scheduler, err := pkg.NewScheduler(1*time.Second, 1*time.Second, 1*time.Second, handler, store)
 	require.NoError(t, err)
 	id := uuid.New()
 	metaData := TestMetaData{Message: gofakeit.HackerPhrase()}
-	cronTrigger, err := pkg.NewCronTrigger("")
+	cronTrigger, err := pkg.NewCronTrigger(oncePerSecondCron)
 	require.NoError(t, err)
 	task := pkg.TaskDefinition{
 		Id:          &id,
 		Metadata:    metaData,
 		CronTrigger: cronTrigger,
 	}
-	err = scheduler.CreateTaskDefinition(task)
-	require.NoError(t, err)
 	go scheduler.Run()
 	defer scheduler.Stop()
-	time.Sleep(10 * time.Second)
-	require.Greater(t, executionCount, 6)
+	err = scheduler.UpsertTaskDefinition(task)
+	require.NoError(t, err)
+	time.Sleep(10500 * time.Millisecond)
+	require.GreaterOrEqual(t, executionCount, 9)
+	require.LessOrEqual(t, executionCount, 11)
+}
+
+func TestListWithMetadataQuery(t *testing.T, store pkg.StoreInterface, metadata interface{}, metadataQuery interface{}) {
+	for i := 0; i < 5; i++ {
+		definition := generateRandomTaskWithExecuteOnceTrigger(time.Time{}, 1*time.Minute)
+		err := store.UpsertTaskDefinition(definition)
+		require.NoError(t, err)
+	}
+	metaDefinition := generateRandomTaskWithExecuteOnceTrigger(time.Time{}, 1*time.Minute)
+	metaDefinition.Metadata = metadata
+	err := store.UpsertTaskDefinition(metaDefinition)
+	require.NoError(t, err)
+	definitions, err := store.ListTaskDefinitions(0, 100, metadataQuery)
+	require.Len(t, definitions, 1)
+	require.Equal(t, definitions[0].Metadata, metadata)
+}
+
+func TestDeleteWithMetadataQuery(t *testing.T, store pkg.StoreInterface, metadata interface{}, metadataQuery interface{}) {
+	for i := 0; i < 5; i++ {
+		definition := generateRandomTaskWithExecuteOnceTrigger(time.Time{}, 1*time.Minute)
+		err := store.UpsertTaskDefinition(definition)
+		require.NoError(t, err)
+	}
+	metaDefinition := generateRandomTaskWithExecuteOnceTrigger(time.Time{}, 1*time.Minute)
+	metaDefinition.Metadata = metadata
+	err := store.UpsertTaskDefinition(metaDefinition)
+	require.NoError(t, err)
+	definitions, err := store.ListTaskDefinitions(0, 100, metadataQuery)
+	require.Len(t, definitions, 1)
+	require.Equal(t, definitions[0].Metadata, metadata)
+	err = store.DeleteTaskDefinitionsByMetadata(metadataQuery)
+	require.NoError(t, err)
+	definitions, err = store.ListTaskDefinitions(0, 100, metadataQuery)
+	require.NoError(t, err)
+	require.Len(t, definitions, 0)
+	definitions, err = store.ListTaskDefinitions(0, 100, nil)
+	require.NoError(t, err)
+	require.Len(t, definitions, 5)
 }
 
 func TestCronTriggerRetry(t *testing.T, store pkg.StoreInterface) {
@@ -642,7 +681,7 @@ func TestCronTriggerRetry(t *testing.T, store pkg.StoreInterface) {
 		Metadata:    metaData,
 		CronTrigger: cronTrigger,
 	}
-	err = scheduler.CreateTaskDefinition(task)
+	err = scheduler.UpsertTaskDefinition(task)
 	require.NoError(t, err)
 	go scheduler.Run()
 	defer scheduler.Stop()
@@ -669,7 +708,7 @@ func TestCronTriggerNoRetry(t *testing.T, store pkg.StoreInterface) {
 		Metadata:    metaData,
 		CronTrigger: cronTrigger,
 	}
-	err = scheduler.CreateTaskDefinition(task)
+	err = scheduler.UpsertTaskDefinition(task)
 	require.NoError(t, err)
 	go scheduler.Run()
 	defer scheduler.Stop()
@@ -776,7 +815,7 @@ func deleteAllTaskInstances(store pkg.StoreInterface) error {
 }
 
 func deleteAllTaskDefinitions(store pkg.StoreInterface) error {
-	definitions, err := store.ListTaskDefinitions(0, 1000)
+	definitions, err := store.ListTaskDefinitions(0, 1000, nil)
 	if err != nil {
 		return err
 	}

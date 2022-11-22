@@ -5,6 +5,7 @@ import (
 	"github.com/catalystsquad/app-utils-go/logging"
 	"github.com/catalystsquad/go-scheduler/pkg"
 	"github.com/catalystsquad/go-scheduler/pkg/cockroachdb_store"
+	"github.com/google/uuid"
 	"github.com/orlangure/gnomock"
 	"github.com/orlangure/gnomock/preset/cockroachdb"
 	"github.com/sirupsen/logrus"
@@ -83,4 +84,25 @@ func (s *CockroachdbStoreSuite) TestCockroachdbStoreLongRunningTaskNotExpired() 
 
 func (s *CockroachdbStoreSuite) TestCockroachdbStoreCronTriggerHappyPath() {
 	TestCronTriggerHappyPath(s.T(), cockroachdbStore)
+}
+
+func (s *CockroachdbStoreSuite) TestListWithMetadataQuery() {
+	id := uuid.New().String()
+	metadata := map[string]interface{}{"user_id": id}
+	metadataQuery := fmt.Sprintf(`metadata @> '{"user_id": "%s"}'`, id)
+	TestListWithMetadataQuery(s.T(), cockroachdbStore, metadata, metadataQuery)
+}
+
+func (s *CockroachdbStoreSuite) TestDeleteWithMetadataQuery() {
+	id := uuid.New().String()
+	metadata := map[string]interface{}{"user_id": id}
+	metadataQuery := fmt.Sprintf(`metadata @> '{"user_id": "%s"}'`, id)
+	TestDeleteWithMetadataQuery(s.T(), cockroachdbStore, metadata, metadataQuery)
+}
+
+func (s *CockroachdbStoreSuite) TestSingleTaskDefinitionCreatedForCronTasks() {
+	TestCronTriggerHappyPath(s.T(), cockroachdbStore)
+	definitions, err := cockroachdbStore.ListTaskDefinitions(0, 1000, nil)
+	require.NoError(s.T(), err)
+	require.Len(s.T(), definitions, 1)
 }

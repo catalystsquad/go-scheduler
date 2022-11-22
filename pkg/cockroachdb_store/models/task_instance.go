@@ -2,8 +2,11 @@ package models
 
 import (
 	"encoding/json"
+	"github.com/catalystsquad/app-utils-go/logging"
 	"github.com/catalystsquad/go-scheduler/pkg"
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 	"time"
 )
 
@@ -17,6 +20,16 @@ type TaskInstance struct {
 	CompletedAt      *time.Time      `json:"completed_at"`
 	TaskDefinitionId *uuid.UUID      `json:"task_definition_id"`
 	TaskDefinition   *TaskDefinition `json:"task_definition"`
+}
+
+func (t *TaskInstance) BeforeCreate(tx *gorm.DB) error {
+	// comparing to uuid.Nil directly doesn't work as expected and skips this condition when it shouldn't, hence the string comparison
+	if t.Id == nil || t.Id.String() == nilUuidString {
+		id := uuid.New()
+		t.Id = &id
+		logging.Log.WithFields(logrus.Fields{"task_definition_id": t.TaskDefinition.Id}).Info("set new id on task instance during create")
+	}
+	return nil
 }
 
 func (t TaskInstance) ToTaskInstance() (pkg.TaskInstance, error) {

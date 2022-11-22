@@ -23,7 +23,7 @@ type Scheduler struct {
 	shutdown       chan bool
 }
 
-func NewScheduler(scheduleWindow, runnerWindow, cleanupWindow time.Duration, handler func(task TaskInstance) error, store StoreInterface) (*Scheduler, error) {
+func NewScheduler(scheduleWindow, runnerWindow, cleanupWindow time.Duration, handler func(taskInstance TaskInstance) error, store StoreInterface) (*Scheduler, error) {
 	scheduler := &Scheduler{
 		ScheduleWindow: &scheduleWindow,
 		RunnerWindow:   &runnerWindow,
@@ -37,7 +37,7 @@ func NewScheduler(scheduleWindow, runnerWindow, cleanupWindow time.Duration, han
 	return scheduler, err
 }
 
-func (s *Scheduler) CreateTaskDefinition(task TaskDefinition) error {
+func (s *Scheduler) UpsertTaskDefinition(task TaskDefinition) error {
 	err := validateTask(task)
 	if err != nil {
 		return err
@@ -51,16 +51,15 @@ func (s *Scheduler) CreateTaskDefinition(task TaskDefinition) error {
 		id := uuid.New()
 		task.Id = &id
 	}
-	return s.store.CreateTaskDefinition(task)
+	return s.store.UpsertTaskDefinition(task)
 }
 
-func (s *Scheduler) UpdateTaskDefinition(task TaskDefinition) error {
-	err := validateTask(task)
-	if err != nil {
-		return err
-	}
-	task.Recurring = task.GetTrigger().IsRecurring()
-	return s.store.UpdateTaskDefinition(task)
+func (s *Scheduler) GetTaskDefinitions(ids []*uuid.UUID) ([]TaskDefinition, error) {
+	return s.store.GetTaskDefinitions(ids)
+}
+
+func (s *Scheduler) ListTaskDefinitions(skip, limit int, metadataQuery interface{}) ([]TaskDefinition, error) {
+	return s.store.ListTaskDefinitions(skip, limit, metadataQuery)
 }
 
 func (s *Scheduler) DeleteTaskDefinition(id *uuid.UUID) error {
@@ -68,6 +67,14 @@ func (s *Scheduler) DeleteTaskDefinition(id *uuid.UUID) error {
 		return errorx.IllegalArgument.New("an id must be provided")
 	}
 	return s.store.DeleteTaskDefinition(id)
+}
+
+func (s *Scheduler) DeleteTaskDefinitions(ids []*uuid.UUID) error {
+	return s.store.DeleteTaskDefinitions(ids)
+}
+
+func (s *Scheduler) DeleteTaskDefinitionsByMetadataQuery(metadataQuery interface{}) error {
+	return s.store.DeleteTaskDefinitionsByMetadata(metadataQuery)
 }
 
 func (s *Scheduler) Run() {
@@ -116,7 +123,7 @@ func (s *Scheduler) createTaskInstance(taskDefinition TaskDefinition) error {
 		ExecuteAt:      executeAt,
 		TaskDefinition: taskDefinition,
 	}
-	err := s.store.CreateTaskInstance(taskInstance)
+	err := s.store.UpsertTaskInstance(taskInstance)
 	if err != nil {
 		logging.Log.WithError(err).Error("error creating task instance")
 		return err
@@ -128,7 +135,7 @@ func (s *Scheduler) createTaskInstance(taskDefinition TaskDefinition) error {
 	} else {
 		taskDefinition.NextFireTime = nil
 	}
-	err = s.store.UpdateTaskDefinition(taskDefinition)
+	err = s.store.UpsertTaskDefinition(taskDefinition)
 	if err != nil {
 		logging.Log.WithError(err).WithFields(logrus.Fields{"id": taskDefinition.Id}).Error("error setting task definition next execution time")
 	}
@@ -184,7 +191,7 @@ func (s *Scheduler) markTaskInstanceInProgress(taskInstance TaskInstance) error 
 	expiresAt := startedAt.Add(taskInstance.TaskDefinition.ExpireAfter)
 	taskInstance.StartedAt = &startedAt
 	taskInstance.ExpiresAt = &expiresAt
-	err := s.store.UpdateTaskInstance(taskInstance)
+	err := s.store.UpsertTaskInstance(taskInstance)
 	if err != nil {
 		logging.Log.WithError(err).WithFields(logrus.Fields{"task_instance_id": taskInstance.Id, "task_definition_id": taskInstance.TaskDefinition.Id}).Error("error setting task instance started_at")
 	}
