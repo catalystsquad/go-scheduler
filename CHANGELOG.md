@@ -1,3 +1,10 @@
+## [1.0.3](https://github.com/catalystsquad/go-scheduler/compare/v1.0.2...v1.0.3) (2022-11-22)
+
+
+### Bug Fixes
+
+* Implement upsert ([#6](https://github.com/catalystsquad/go-scheduler/issues/6)) ([f87ed3f](https://github.com/catalystsquad/go-scheduler/commit/f87ed3fd8d16080d6aa4fd2a3a51cd2eb273a435))
+
 ## [1.0.2](https://github.com/catalystsquad/go-scheduler/compare/v1.0.1...v1.0.2) (2022-11-10)
 
 
