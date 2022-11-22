@@ -21,7 +21,8 @@ type TaskInstance struct {
 }
 
 func (t *TaskInstance) BeforeCreate(tx *gorm.DB) error {
-	if t.Id == nil || t.Id == &uuid.Nil {
+	// comparing to uuid.Nil directly doesn't work as expected and skips this condition when it shouldn't, hence the string comparison
+	if t.Id == nil || t.Id.String() == nilUuidString {
 		id := uuid.New()
 		t.Id = &id
 	}

@@ -26,8 +26,11 @@ type TaskDefinition struct {
 	Recurring           bool
 }
 
+var nilUuidString = uuid.Nil.String()
+
 func (t *TaskDefinition) BeforeCreate(tx *gorm.DB) error {
-	if t.Id == nil || t.Id == &uuid.Nil {
+	// comparing to uuid.Nil directly doesn't work as expected and skips this condition when it shouldn't, hence the string comparison
+	if t.Id == nil || t.Id.String() == nilUuidString {
 		id := uuid.New()
 		t.Id = &id
 	}
