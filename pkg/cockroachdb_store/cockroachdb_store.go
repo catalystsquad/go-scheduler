@@ -219,7 +219,6 @@ func (c *CockroachdbStore) GetTaskInstancesToRun(limit time.Time) ([]pkg.TaskIns
 }
 
 func (c *CockroachdbStore) UpsertTaskInstance(taskInstance pkg.TaskInstance) error {
-	logging.Log.Info("upserting task instance")
 	taskInstanceModel, err := models.GetTaskInstanceModelFromTaskInstance(taskInstance)
 	if err != nil {
 		return err
@@ -281,7 +280,6 @@ func (c *CockroachdbStore) Initialize() (err error) {
 }
 
 func (c *CockroachdbStore) UpsertTaskDefinition(taskDefinition pkg.TaskDefinition) error {
-	logging.Log.Info("upserting task definition")
 	taskDefinitionModel, err := models.GetTaskDefinitionModelFromTaskDefinition(taskDefinition)
 	taskDefinitionModel.TaskInstances = nil
 	if err != nil {

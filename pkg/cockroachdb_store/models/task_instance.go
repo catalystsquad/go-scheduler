@@ -2,10 +2,8 @@ package models
 
 import (
 	"encoding/json"
-	"github.com/catalystsquad/app-utils-go/logging"
 	"github.com/catalystsquad/go-scheduler/pkg"
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 	"time"
 )
@@ -27,7 +25,6 @@ func (t *TaskInstance) BeforeCreate(tx *gorm.DB) error {
 	if t.Id == nil || t.Id.String() == nilUuidString {
 		id := uuid.New()
 		t.Id = &id
-		logging.Log.WithFields(logrus.Fields{"task_definition_id": t.TaskDefinition.Id}).Info("set new id on task instance during create")
 	}
 	return nil
 }
