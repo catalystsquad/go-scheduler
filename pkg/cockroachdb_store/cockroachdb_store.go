@@ -42,7 +42,7 @@ func (c *CockroachdbStore) GetTaskDefinitions(ids []*uuid.UUID) ([]pkg.TaskDefin
 	definitions := []models.TaskDefinition{}
 	err := crdbgorm.ExecuteTx(context.Background(), c.db, nil, func(tx *gorm.DB) error {
 		// query for task definitions that aren't completed, whose next fire time is less than the limit
-		return tx.Find(&definitions, ids).Error
+		return tx.Preload(clause.Associations).Find(&definitions, ids).Error
 	})
 	if err != nil {
 		return nil, err
