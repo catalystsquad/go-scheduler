@@ -1,3 +1,10 @@
+## [1.0.4](https://github.com/catalystsquad/go-scheduler/compare/v1.0.3...v1.0.4) (2022-11-28)
+
+
+### Bug Fixes
+
+* Fix a nil pointer in GetTaskDefinitions ([#7](https://github.com/catalystsquad/go-scheduler/issues/7)) ([860867a](https://github.com/catalystsquad/go-scheduler/commit/860867aab8073bab80814a2abe40537dd2e6ae18))
+
 ## [1.0.3](https://github.com/catalystsquad/go-scheduler/compare/v1.0.2...v1.0.3) (2022-11-22)
 
 
