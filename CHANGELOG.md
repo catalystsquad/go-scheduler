@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/catalystsquad/go-scheduler/compare/v1.0.4...v1.1.0) (2023-05-24)
+
+
+### Features
+
+* implement db connection settings with optional configuration  ([#12](https://github.com/catalystsquad/go-scheduler/issues/12)) ([fe64140](https://github.com/catalystsquad/go-scheduler/commit/fe641405ac1db5674e28d515961ed1f5855a3413))
+
 ## [1.0.4](https://github.com/catalystsquad/go-scheduler/compare/v1.0.3...v1.0.4) (2022-11-28)
 
 
