@@ -58,12 +58,6 @@ func WithConnectionSettings(maxIdleConns, maxOpenConns int, connMaxLifetime time
 	}
 }
 
-func WithConnMaxLifetime(connMaxLifetime time.Duration) CockroachdbStoreOpt {
-	return func(c *CockroachdbStore) {
-		c.connMaxLifetime = &connMaxLifetime
-	}
-}
-
 func (c *CockroachdbStore) Initialize() (err error) {
 	// connect to db
 	c.db, err = gorm.Open(postgres.Open(c.uri), c.config)
