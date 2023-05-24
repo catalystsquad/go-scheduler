@@ -26,6 +26,88 @@ type CockroachdbStore struct {
 	uri    string
 	db     *gorm.DB
 	config *gorm.Config
+
+	maxIdleConns    *int
+	maxOpenConns    *int
+	connMaxLifetime *time.Duration
+}
+
+func NewCockroachdbStore(uri string, config *gorm.Config, opts ...CockroachdbStoreOpt) pkg.StoreInterface {
+	if config == nil {
+		config = &gorm.Config{}
+	}
+
+	c := &CockroachdbStore{
+		uri:    uri,
+		config: config,
+	}
+	for _, opt := range opts {
+		opt(c)
+	}
+
+	return c
+}
+
+type CockroachdbStoreOpt func(*CockroachdbStore)
+
+func WithConnectionSettings(maxIdleConns, maxOpenConns int, connMaxLifetime time.Duration) CockroachdbStoreOpt {
+	return func(c *CockroachdbStore) {
+		c.maxIdleConns = &maxIdleConns
+		c.maxOpenConns = &maxOpenConns
+		c.connMaxLifetime = &connMaxLifetime
+	}
+}
+
+func WithConnMaxLifetime(connMaxLifetime time.Duration) CockroachdbStoreOpt {
+	return func(c *CockroachdbStore) {
+		c.connMaxLifetime = &connMaxLifetime
+	}
+}
+
+func (c *CockroachdbStore) Initialize() (err error) {
+	// connect to db
+	c.db, err = gorm.Open(postgres.Open(c.uri), c.config)
+	if err != nil {
+		logging.Log.WithError(err).Error("error connecting to cockroachdb")
+		return err
+	}
+	// run migrations
+	var sqldb *sql.DB
+	sqldb, err = c.db.DB()
+	if err != nil {
+		return err
+	}
+
+	// set max idle conns if provided
+	if c.maxIdleConns != nil {
+		sqldb.SetMaxIdleConns(*c.maxIdleConns)
+	} else {
+		sqldb.SetMaxIdleConns(10)
+	}
+
+	// set max open conns and max conn lifetime
+	if c.maxOpenConns != nil {
+		sqldb.SetMaxOpenConns(*c.maxOpenConns)
+	} else {
+		sqldb.SetMaxOpenConns(100)
+	}
+
+	if c.connMaxLifetime != nil {
+		sqldb.SetConnMaxLifetime(*c.connMaxLifetime)
+	} else {
+		sqldb.SetConnMaxLifetime(time.Hour)
+	}
+
+	// set goose file system to use the embedded migrations
+	goose.SetBaseFS(migrations)
+	// set goose table name so it doesn't conflict with any other goose tables that the user may be using
+	goose.SetTableName(gooseTableName)
+	err = goose.Up(sqldb, "migrations")
+	if err != nil {
+		logging.Log.WithError(err).Error("error running scheduler migrations")
+		return err
+	}
+	return nil
 }
 
 func (c *CockroachdbStore) DeleteTaskDefinitionsByMetadata(metadataQuery interface{}) error {
@@ -244,44 +326,6 @@ func (c *CockroachdbStore) DeleteTaskInstance(id *uuid.UUID) error {
 		logging.Log.WithError(err).Error("error deleting task instance")
 	}
 	return err
-}
-
-func NewCockroachdbStore(uri string, config *gorm.Config) pkg.StoreInterface {
-	if config == nil {
-		config = &gorm.Config{}
-	}
-	return &CockroachdbStore{
-		uri:    uri,
-		config: config,
-	}
-}
-
-func (c *CockroachdbStore) Initialize() (err error) {
-	// connect to db
-	c.db, err = gorm.Open(postgres.Open(c.uri), c.config)
-	if err != nil {
-		logging.Log.WithError(err).Error("error connecting to cockroachdb")
-		return err
-	}
-	// run migrations
-	var sqldb *sql.DB
-	sqldb, err = c.db.DB()
-	if err != nil {
-		return err
-	}
-	sqldb.SetMaxIdleConns(10)
-	sqldb.SetMaxOpenConns(100)
-	sqldb.SetConnMaxLifetime(time.Hour)
-	// set goose file system to use the embedded migrations
-	goose.SetBaseFS(migrations)
-	// set goose table name so it doesn't conflict with any other goose tables that the user may be using
-	goose.SetTableName(gooseTableName)
-	err = goose.Up(sqldb, "migrations")
-	if err != nil {
-		logging.Log.WithError(err).Error("error running scheduler migrations")
-		return err
-	}
-	return nil
 }
 
 func (c *CockroachdbStore) UpsertTaskDefinition(taskDefinition pkg.TaskDefinition) error {
