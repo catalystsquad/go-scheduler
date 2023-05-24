@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"time"
+
 	"github.com/catalystsquad/app-utils-go/logging"
 	"github.com/catalystsquad/go-scheduler/pkg"
 	"github.com/catalystsquad/go-scheduler/pkg/cockroachdb_store/models"
@@ -13,7 +15,6 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"time"
 )
 
 const gooseTableName = "goose_catalyst_scheduler"
@@ -268,6 +269,9 @@ func (c *CockroachdbStore) Initialize() (err error) {
 	if err != nil {
 		return err
 	}
+	sqldb.SetMaxIdleConns(10)
+	sqldb.SetMaxOpenConns(100)
+	sqldb.SetConnMaxLifetime(time.Hour)
 	// set goose file system to use the embedded migrations
 	goose.SetBaseFS(migrations)
 	// set goose table name so it doesn't conflict with any other goose tables that the user may be using
